@@ -19,7 +19,7 @@
 
     <!-- Site title with logo -->
     <a class="navbar-brand me-auto me-lg-3 d-flex align-items-center" href="{{ relLangURL "" }}">
-      <img src="/images/complytime-logo.png" alt="{{ .Site.Title }} logo" height="32" width="32" class="me-2">
+      <img src="{{ "images/complytime-logo.png" | relURL }}" alt="{{ .Site.Title }} logo" height="32" width="32" class="me-2">
       {{ .Site.Title }}
     </a>
 
