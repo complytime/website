@@ -1,5 +1,5 @@
 {
-  "name": "complytime-website",
+  "name": "website",
   "version": "0.1.0",
   "description": "The official ComplyTime website",
   "author": "The ComplyTime Authors",
@@ -13,7 +13,7 @@
     "dev": "hugo server --disableFastRender --noHTTPCache",
     "format": "prettier **/** -w -c",
     "build": "hugo --minify --gc",
-    "preview": "vite preview --outDir public"
+    "preview": "hugo server --disableFastRender --noHTTPCache"
   },
   "dependencies": {
     "@tabler/icons": "^3.34.1",
@@ -32,9 +32,5 @@
   },
   "engines": {
     "node": ">=20.11.0"
-  },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
   }
 }

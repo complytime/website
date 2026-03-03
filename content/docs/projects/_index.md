@@ -145,33 +145,6 @@ ComplyTime consists of several interconnected projects, each serving a specific 
   </div>
 </div>
 
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        ComplyTime Ecosystem                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐  │
-│  │  complyctl  │───▶│ complyscribe│───▶│ OSCAL Documents     │  │
-│  │    (CLI)    │    │  (Authoring)│    │ (Catalogs, Profiles)|  |
-│  │             |    |             |    |                     |  |
-│  └─────────────┘    └─────────────┘    └─────────────────────┘  │
-│         │                                        │               │
-│         ▼                                        ▼               │
-│  ┌─────────────────────────────────────────────────────────────┐│
-│  │            Compliance-to-Policy (C2P) Framework             ││
-│  └─────────────────────────────────────────────────────────────┘│
-│         │                                        │               │
-│         ▼                                        ▼               │
-│  ┌─────────────────┐                  ┌─────────────────────┐   │
-│  │    Collector    │                  │   Policy Engines    │   │
-│  │   Components    │                  │  (OPA, Kyverno...)  │   │
-│  └─────────────────┘                  └─────────────────────┘   │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
 ## Getting Involved
 
 All ComplyTime projects are open source under the Apache 2.0 license. We welcome contributions from the community!

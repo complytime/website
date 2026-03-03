@@ -11,7 +11,7 @@ summarylength = 20
 
 # Multilingual
 defaultContentLanguage = "en"
-disableLanguages = ["de", "nl"]
+
 defaultContentLanguageInSubdir = false
 
 copyRight = "Copyright (c) 2024-2025 ComplyTime"

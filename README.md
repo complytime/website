@@ -8,7 +8,7 @@ Built with [Hugo](https://gohugo.io/) and the [Doks](https://getdoks.org/) theme
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) v18 or later
+- [Node.js](https://nodejs.org/) v20.11 or later
 - [npm](https://www.npmjs.com/) (included with Node.js)
 
 ### Development
@@ -37,23 +37,26 @@ The output will be in the `public/` directory.
 ```
 website/
 ├── assets/                # SCSS, JavaScript, images
+│   ├── js/
+│   │   └── custom.js
 │   └── scss/
 │       └── common/
 │           ├── _custom.scss
 │           └── _variables-custom.scss
 ├── config/                # Hugo configuration
-│   └── _default/
-│       ├── hugo.toml
-│       ├── params.toml
-│       └── menus/
-│           └── menus.en.toml
+│   ├── _default/
+│   │   ├── hugo.toml
+│   │   ├── languages.toml
+│   │   ├── params.toml
+│   │   └── menus/
+│   │       └── menus.en.toml
+│   ├── production/        # Production overrides
+│   └── next/              # Alternative env overrides
 ├── content/               # Markdown content
 │   ├── _index.md          # Homepage
 │   ├── docs/              # Documentation
 │   │   ├── getting-started/
-│   │   ├── projects/      # Project pages (complyctl, complyscribe, etc.)
-│   │   ├── architecture/
-│   │   └── contributing/
+│   │   └── projects/      # Project pages (complyctl, complyscribe, etc.)
 │   └── privacy.md
 ├── layouts/               # Custom layouts
 │   ├── home.html          # Homepage layout
@@ -70,11 +73,11 @@ website/
 
 ### Navigation
 
-| Menu Item  | URL                    | Description                       |
-|------------|------------------------|-----------------------------------|
-| Docs       | `/docs/getting-started/` | Documentation landing page       |
-| Projects   | `/docs/projects/`      | ComplyTime project pages          |
-| Community  | `/docs/contributing/`  | Contribution and community info   |
+| Menu Item     | URL                    | Description                |
+|---------------|------------------------|----------------------------|
+| Getting Started | `/docs/getting-started/` | Documentation landing page |
+| Projects      | `/docs/projects/`      | ComplyTime project pages   |
+| Privacy Policy | `/privacy/`            | Privacy policy             |
 
 ### Adding Documentation
 
@@ -106,6 +109,7 @@ Custom styles are in `assets/scss/common/`:
 
 Site configuration is in `config/_default/`:
 - `hugo.toml` - Hugo settings
+- `languages.toml` - Language and footer settings
 - `params.toml` - Theme parameters
 - `menus/menus.en.toml` - Navigation menus
 

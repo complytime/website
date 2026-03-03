@@ -114,8 +114,7 @@ website/
 │   ├── privacy.md                   #   Privacy policy
 │   └── docs/
 │       ├── getting-started/         #   Getting started guide
-│       ├── projects/                #   Project pages (complyctl, etc.)
-│       └── getting-started/         #   Getting started guide
+│       └── projects/                #   Project pages (complyctl, etc.)
 │
 ├── layouts/                         # Custom Hugo layout overrides
 │   ├── home.html                    #   Homepage template (hero + features)
@@ -282,7 +281,6 @@ into the same relative path under `layouts/` and modify it.
 | `layouts/home.html` | Doks default homepage | Custom hero, features, and project cards |
 | `layouts/docs/list.html` | Doks docs list | Custom section listing layout |
 | `layouts/_default/_markup/render-image.html` | `@thulite/images` render hook | Fixes broken remote SVG/badge images |
-| `layouts/_partials/head/custom-head.html` | (empty hook) | Available for custom `<head>` tags |
 | `layouts/_partials/footer/script-footer-custom.html` | (empty hook) | Available for custom footer scripts |
 
 ### The Module Mount System
