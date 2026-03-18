@@ -347,7 +347,8 @@ matching:
 
 ```yaml
 ---
-title: "complyctl"
+title: "Complyctl"
+linkTitle: "complyctl"
 description: "A compliance CLI tool for Kubernetes."
 date: 2026-03-10T18:30:00Z
 lastmod: 2026-03-10T18:30:00Z
@@ -360,7 +361,7 @@ params:
   source_sha: "abc123def456"
   readme_sha: "def789abc012"
   seo:
-    title: "complyctl | ComplyTime"
+    title: "Complyctl | ComplyTime"
     description: "A compliance CLI tool for Kubernetes."
 ---
 ```
