@@ -7,9 +7,9 @@
 
 The ComplyTime website (`complytime.dev`) documents a growing ecosystem of open-source compliance tools hosted across multiple repositories in the `complytime` GitHub organization. Before this feature, project documentation was manually copied into the site — error-prone, inconsistent, and unable to scale as new repos were added.
 
-This feature replaces that workflow with a Go CLI tool (`cmd/sync-content/`, ~2,100 lines across 10 source files in `package main`) that derives the set of eligible repositories from the org's governance registry (`peribolos.yaml` in the `.github` repo), fetches their README content and per-repo metadata via the GitHub REST API, applies Markdown transforms (heading level shifting, Title Case normalisation with acronym awareness and ALL CAPS normalisation, badge stripping, relative link rewriting), and generates Hugo-compatible pages and landing page card data. A declarative config overlay (`sync-config.yaml`) provides precision control for repos needing custom documentation layouts.
+This feature replaces that workflow with a Go CLI tool (`cmd/sync-content/`, 10 source files in `package main`) that derives the set of eligible repositories from the org's governance registry (`peribolos.yaml` in the `.github` repo), fetches their README content and per-repo metadata via the GitHub REST API, applies Markdown transforms (heading level shifting, Title Case normalisation with acronym awareness and ALL CAPS normalisation, badge stripping, relative link rewriting, diagram code block rewriting to Kroki format), and generates Hugo-compatible pages and landing page card data. A declarative config overlay (`sync-config.yaml`) provides precision control for repos needing custom documentation layouts.
 
-**Dependencies**: Go 1.25+, `gopkg.in/yaml.v3` (sole third-party Go dep), Hugo 0.155.1 extended, Node.js 22.
+**Dependencies**: Go 1.25+, `gopkg.in/yaml.v3` (sole third-party Go dep), Hugo 0.155.1 extended, Node.js 22. Diagram rendering requires `@thulite/doks-core`'s `render-codeblock-kroki.html` hook and `krokiURL` in `params.toml` (external service: `https://kroki.io`).
 
 ## Scope
 
@@ -23,10 +23,10 @@ This feature replaces that workflow with a Go CLI tool (`cmd/sync-content/`, ~2,
 | IS-002 | README fetch with base64 decoding and SHA tracking |
 | IS-003 | Per-repo page generation: section index (`_index.md`, frontmatter only, with `formatRepoTitle` for `title` and raw repo name as `linkTitle` for sidebar; ALL CAPS repo/file names normalised to Title Case) + overview page (`overview.md`, README content) |
 | IS-004 | Landing page card generation (`data/projects.json`) with type derivation from topics |
-| IS-005 | Config-driven file sync with transforms (`inject_frontmatter`, `rewrite_links`, `strip_badges`); heading shift and Title Case applied unconditionally to all synced content |
+| IS-005 | Config-driven file sync with transforms (`inject_frontmatter`, `rewrite_links`, `strip_badges`, `rewrite_diagrams`); all synced content (org-discovered and config-driven) unconditionally receives `stripLeadingH1`, `shiftHeadings`, `titleCaseHeadings`, `stripBadges`, `rewriteDiagramBlocks`, and `rewriteRelativeLinks` |
 | IS-006 | Concurrent processing with bounded worker pool (`--workers`) |
 | IS-007 | Dry-run by default; `--write` flag required for disk I/O |
-| IS-008 | Markdown transforms: `stripLeadingH1` (removes leading H1 — title already in frontmatter), `shiftHeadings` (H1→H2, H2→H3, …), `titleCaseHeadings` (acronym-aware Title Case for in-page headings and TOC; normalises ALL CAPS words to Title Case while preserving known acronyms from the `knownAcronyms` map in `hugo.go` — ~30 domain terms; maintainers add entries as new projects introduce terminology), `stripBadges`, `rewriteRelativeLinks` |
+| IS-008 | Markdown transforms: `stripLeadingH1` (removes leading H1 — title already in frontmatter), `shiftHeadings` (H1→H2, H2→H3, …), `titleCaseHeadings` (acronym-aware Title Case for in-page headings and TOC; normalises ALL CAPS words to Title Case while preserving known acronyms from the `knownAcronyms` map in `hugo.go` — ~30 domain terms; maintainers add entries as new projects introduce terminology), `stripBadges`, `rewriteRelativeLinks`, `rewriteDiagramBlocks` (converts fenced diagram code blocks — mermaid, plantuml, d2, graphviz/dot, ditaa, and other Kroki-supported languages — to `kroki {type=…}` format for server-side rendering via Doks' `render-codeblock-kroki.html` hook; `dot` normalised to `graphviz`; routes mermaid through Kroki rather than Doks' client-side `render-codeblock-mermaid.html` to uphold Constitution V) |
 | IS-009 | Repo filtering: `--include`/`--exclude` lists (peribolos is the governance gate; no API metadata filtering) |
 | IS-012 | Sync manifest (`.sync-manifest.json`) for orphan file tracking |
 | IS-014 | Doc page auto-sync from `discovery.scan_paths` directories |
@@ -215,10 +215,11 @@ All criteria must pass before feature 006 merges to `main`.
 | SC-014 | `--lock` gates content to approved SHAs; unapproved repos are skipped | `lock_test.go`, `sync_test.go` (`TestProcessRepo_LockedSHA`) |
 | SC-015 | `--update-lock` writes current upstream SHAs to lockfile | `lock_test.go` (`TestWriteLock`, `TestWriteLock_DeterministicOrder`) |
 | SC-016 | Weekly check workflow creates/updates a PR with lockfile changes | `sync-content-check.yml` manual dispatch |
+| SC-017 | Diagram code blocks in upstream content are rewritten to Kroki format and render server-side (not via client-side JS) | `TestRewriteDiagramBlocks` (12 subtests), `sync.go` pipeline integration (3 call sites) |
 
 ## Merge Readiness Gate
 
-All 16 success criteria (SC-001 through SC-016) MUST pass before merging feature 006 to `main`. SC-006 is deferred (blocked on config sources being declared) but its code paths are covered by unit tests (`TestSyncConfigSource`, `TestProcessRepo`). SC-016 requires a manual `workflow_dispatch` run of `sync-content-check.yml` after merge.
+All 17 success criteria (SC-001 through SC-017) MUST pass before merging feature 006 to `main`. SC-006 is deferred (blocked on config sources being declared) but its code paths are covered by unit tests (`TestSyncConfigSource`, `TestProcessRepo`). SC-016 requires a manual `workflow_dispatch` run of `sync-content-check.yml` after merge.
 
 ## Appendix: Legacy ID Cross-Reference
 

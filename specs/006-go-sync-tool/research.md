@@ -112,3 +112,22 @@ go run ./cmd/sync-content --org complytime --config sync-config.yaml --lock .con
 **Alternatives considered**:
 - Committing an empty `data/projects.json` (`[]`) — rejected per Constitution XIII.
 - Adding a `.gitkeep` in `data/` — unnecessary since Hugo handles the absence gracefully.
+
+## R8: Diagram Code Block Rewriting (Kroki vs Client-Side Mermaid)
+
+**Decision**: Rewrite all upstream diagram code blocks (mermaid, plantuml, d2, graphviz/dot, ditaa, and 12 other languages) from their native fenced format (`` ```mermaid ``) to Kroki format (`` ```kroki {type=mermaid} ``) during content sync. The `dot` alias is normalised to `graphviz` for Kroki compatibility.
+
+**Rationale**: Doks ships two relevant render hooks:
+- `render-codeblock-mermaid.html` — renders mermaid diagrams via client-side JavaScript
+- `render-codeblock-kroki.html` — renders diagrams server-side via the Kroki API (`krokiURL` in `params.toml`)
+
+Routing mermaid through Kroki instead of the native mermaid hook avoids adding client-side JavaScript to diagram rendering, upholding Constitution V (No Runtime JavaScript Frameworks). Kroki also supports 17 diagram languages (plantuml, d2, graphviz, ditaa, etc.) that have no Doks render hook at all, so a single rewrite handles all diagram types uniformly.
+
+The transform is applied unconditionally in `processRepo` and `syncRepoDocPages` (all org-discovered content), and conditionally in `syncConfigSource` (gated by `rewrite_diagrams` config flag).
+
+**Infrastructure dependency**: Requires `krokiURL = "https://kroki.io"` in `config/_default/params.toml` and the `@thulite/doks-core` module mount (which provides `render-codeblock-kroki.html`). Both are already configured.
+
+**Alternatives considered**:
+- Leaving native `` ```mermaid `` blocks as-is — rejected because Doks' `render-codeblock-mermaid.html` uses client-side JS (violates Constitution V), and non-mermaid diagrams (plantuml, d2, etc.) would not render at all.
+- Adding custom Hugo render hooks per diagram language — rejected per Constitution I (no theme forking) and XIV (simplicity). Kroki handles all languages through one hook.
+- Client-side Kroki rendering via JavaScript — rejected per Constitution V.
