@@ -42,7 +42,7 @@ Every Go source file MUST include `// SPDX-License-Identifier: Apache-2.0` as th
 
 ### X. Go Code Quality
 
-All Go code MUST pass `go vet`, `gofmt`, and any configured linter checks before merge. Errors MUST always be checked and returned — never silently discarded.
+All Go code MUST pass `go vet`, `gofmt`, and any linter checks configured in the CI workflow (see `.github/workflows/ci.yml`) before merge. Errors MUST always be checked and returned — never silently discarded.
 
 ### XI. Structured Logging
 
@@ -58,7 +58,7 @@ All sync tool output (project pages, card data) is derived from the GitHub API a
 
 ### XIV. Simplicity
 
-Start simple, apply YAGNI. No abstractions without proven need. Tooling favors flat, domain-organised source files over deep package hierarchies. Complexity MUST be justified against a simpler alternative.
+Start simple, apply "You Aren't Gonna Need It" (YAGNI) principle. No abstractions without proven need. Tooling favors flat, domain-organised source files over deep package hierarchies. Complexity MUST be justified against a simpler alternative.
 
 ## Operations
 
