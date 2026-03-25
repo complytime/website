@@ -38,7 +38,9 @@ import (
 	"time"
 )
 
-func main() {
+func main() { os.Exit(run()) }
+
+func run() int {
 	org := flag.String("org", "complytime", "GitHub organization name")
 	token := flag.String("token", "", "GitHub API token (or set GITHUB_TOKEN env var)")
 	output := flag.String("output", ".", "Hugo site root directory")
@@ -58,7 +60,7 @@ func main() {
 
 	if *workers < 1 {
 		slog.Error("--workers must be at least 1", "value", *workers)
-		os.Exit(1)
+		return 1
 	}
 
 	apiToken := *token
@@ -99,7 +101,7 @@ func main() {
 		cfg, err = loadConfig(*configPath)
 		if err != nil {
 			slog.Error("error loading config", "error", err)
-			os.Exit(1)
+			return 1
 		}
 		slog.Info("loaded sync config", "path", *configPath, "sources", len(cfg.Sources))
 		for _, r := range cfg.Discovery.IgnoreRepos {
@@ -111,7 +113,7 @@ func main() {
 
 	if *updateLock && *lockPath == "" {
 		slog.Error("--update-lock requires --lock")
-		os.Exit(1)
+		return 1
 	}
 
 	var lock *ContentLock
@@ -120,7 +122,7 @@ func main() {
 		lock, err = readLock(*lockPath)
 		if err != nil {
 			slog.Error("error loading lockfile", "error", err)
-			os.Exit(1)
+			return 1
 		}
 		slog.Info("loaded content lock", "path", *lockPath, "repos", len(lock.Repos))
 	}
@@ -147,7 +149,7 @@ func main() {
 	repoNames, err := gh.fetchPeribolosRepos(ctx, *org)
 	if err != nil {
 		slog.Error("error fetching peribolos.yaml", "error", err)
-		os.Exit(1)
+		return 1
 	}
 	slog.Info("found repos in governance registry", "count", len(repoNames))
 
@@ -164,7 +166,7 @@ func main() {
 		}
 		if !peribolosSet[shortName] {
 			slog.Error("--repo target is not in the governance registry (peribolos.yaml)", "repo", *repoFilter)
-			os.Exit(1)
+			return 1
 		}
 	}
 
@@ -208,7 +210,7 @@ func main() {
 	if len(eligible) == 0 && len(oldState) > 0 && *write && len(includeSet) == 0 {
 		slog.Error("refusing to clean: zero eligible repos from API but previous state has entries — possible API outage or misconfiguration",
 			"old_repos", len(oldState))
-		os.Exit(1)
+		return 1
 	}
 
 	ignoreFiles := make(map[string]bool)
@@ -386,7 +388,7 @@ func main() {
 		})
 		if err := writeLock(*lockPath, newLock); err != nil {
 			slog.Error("error writing lockfile", "path", *lockPath, "error", err)
-			os.Exit(1)
+			return 1
 		}
 		slog.Info("updated content lock", "path", *lockPath, "repos", len(newLock.Repos))
 	}
@@ -395,13 +397,13 @@ func main() {
 		jsonData, err := json.MarshalIndent(cards, "", "  ")
 		if err != nil {
 			slog.Error("error marshaling projects.json", "error", err)
-			os.Exit(1)
+			return 1
 		}
 		jsonPath := filepath.Join(*output, "data", "projects.json")
 		written, err := writeFileSafe(jsonPath, append(jsonData, '\n'))
 		if err != nil {
 			slog.Error("error writing projects.json", "error", err)
-			os.Exit(1)
+			return 1
 		}
 		if written {
 			slog.Info("wrote projects.json", "count", len(cards))
@@ -433,6 +435,7 @@ func main() {
 	}
 
 	if result.errors > 0 {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

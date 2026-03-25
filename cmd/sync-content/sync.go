@@ -375,11 +375,12 @@ func processRepo(ctx context.Context, gh *apiClient, org, output string, repo Re
 	}
 
 	result.mu.Lock()
-	if !existed {
+	switch {
+	case !existed:
 		result.added = append(result.added, repo.Name)
-	} else if contentChanged {
+	case contentChanged:
 		result.updated = append(result.updated, repo.Name)
-	} else {
+	default:
 		result.unchanged = append(result.unchanged, repo.Name)
 	}
 	result.mu.Unlock()
