@@ -1,12 +1,14 @@
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-22.04
 
+# hadolint ignore=DL3008
 RUN apt-get update && \
-    apt-get install -y \
+    apt-get install -y --no-install-recommends \
     ca-certificates \
     nodejs \
     npm \
     wget && \
-    update-ca-certificates
+    update-ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 ARG HUGO_VERSION="0.155.1"
 RUN wget --quiet "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_Linux-64bit.tar.gz" && \
