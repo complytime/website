@@ -34,19 +34,20 @@ type repoSummary struct {
 
 // syncResult tracks outcomes for the final summary and exit code.
 type syncResult struct {
-	mu             sync.Mutex
-	synced         int
-	skipped        int
-	filesProcessed int
-	warnings       int
-	errors         int
-	added          []string
-	updated        []string
-	removed        []string
-	unchanged      []string
-	writtenFiles   []string
-	repoDetails    map[string]repoSummary
-	repoFiles      map[string][]string
+	mu               sync.Mutex
+	synced           int
+	skipped          int
+	filesProcessed   int
+	warnings         int
+	errors           int
+	added            []string
+	updated          []string
+	removed          []string
+	unchanged        []string
+	writtenFiles     []string
+	repoDetails      map[string]repoSummary
+	repoFiles        map[string][]string
+	changedRepoFiles map[string][]string
 }
 
 // recordFile appends a relative file path to the manifest of files written
@@ -77,6 +78,15 @@ func (r *syncResult) recordRepoFile(repoName, srcPath string) {
 		r.repoFiles = make(map[string][]string)
 	}
 	r.repoFiles[repoName] = append(r.repoFiles[repoName], srcPath)
+	r.mu.Unlock()
+}
+
+func (r *syncResult) recordChangedRepoFile(repoName, srcPath string) {
+	r.mu.Lock()
+	if r.changedRepoFiles == nil {
+		r.changedRepoFiles = make(map[string][]string)
+	}
+	r.changedRepoFiles[repoName] = append(r.changedRepoFiles[repoName], srcPath)
 	r.mu.Unlock()
 }
 
@@ -193,33 +203,77 @@ func (r *syncResult) toMarkdown() string {
 	return b.String()
 }
 
+type repoFileGroup struct {
+	name  string
+	files []string
+}
+
 func (r *syncResult) writeFileManifest(b *strings.Builder) {
 	if len(r.repoFiles) == 0 {
 		return
 	}
 
+	changedSet := make(map[string]map[string]bool)
+	for repo, files := range r.changedRepoFiles {
+		s := make(map[string]bool, len(files))
+		for _, f := range files {
+			s[f] = true
+		}
+		changedSet[repo] = s
+	}
+
+	var changedGroups, unchangedGroups []repoFileGroup
+	totalChanged, totalUnchanged := 0, 0
+
 	repoNames := make([]string, 0, len(r.repoFiles))
-	totalFiles := 0
-	for name, files := range r.repoFiles {
+	for name := range r.repoFiles {
 		repoNames = append(repoNames, name)
-		totalFiles += len(files)
 	}
 	sort.Strings(repoNames)
 
-	fmt.Fprintf(b, "\n<details>\n<summary>Synced files (%d across %d repositories)</summary>\n\n",
-		totalFiles, len(repoNames))
-
 	for _, name := range repoNames {
-		files := r.repoFiles[name]
-		sorted := append([]string(nil), files...)
-		sort.Strings(sorted)
-		fmt.Fprintf(b, "**%s** (%d files)\n\n", name, len(sorted))
-		for _, f := range sorted {
+		cs := changedSet[name]
+		var changed, unchanged []string
+		for _, f := range r.repoFiles[name] {
+			if cs[f] {
+				changed = append(changed, f)
+			} else {
+				unchanged = append(unchanged, f)
+			}
+		}
+		sort.Strings(changed)
+		sort.Strings(unchanged)
+		if len(changed) > 0 {
+			changedGroups = append(changedGroups, repoFileGroup{name, changed})
+			totalChanged += len(changed)
+		}
+		if len(unchanged) > 0 {
+			unchangedGroups = append(unchangedGroups, repoFileGroup{name, unchanged})
+			totalUnchanged += len(unchanged)
+		}
+	}
+
+	writeFileSection(b, changedGroups, totalChanged, "Changed files")
+	writeFileSection(b, unchangedGroups, totalUnchanged, "Unchanged files")
+}
+
+func writeFileSection(b *strings.Builder, groups []repoFileGroup, total int, label string) {
+	if total == 0 {
+		return
+	}
+	repoWord := "repositories"
+	if len(groups) == 1 {
+		repoWord = "repository"
+	}
+	fmt.Fprintf(b, "\n<details>\n<summary>%s (%d across %d %s)</summary>\n\n",
+		label, total, len(groups), repoWord)
+	for _, g := range groups {
+		fmt.Fprintf(b, "**%s** (%d files)\n\n", g.name, len(g.files))
+		for _, f := range g.files {
 			fmt.Fprintf(b, "- `%s`\n", f)
 		}
 		b.WriteString("\n")
 	}
-
 	b.WriteString("</details>\n")
 }
 
@@ -341,6 +395,7 @@ func syncConfigSource(ctx context.Context, gh *apiClient, src Source, defaults D
 		result.recordRepoFile(repoName, file.Src)
 
 		if written {
+			result.recordChangedRepoFile(repoName, file.Src)
 			logger.Info("wrote config file", "src", file.Src, "dest", destPath)
 		} else {
 			logger.Info("config file unchanged", "src", file.Src, "dest", destPath)
@@ -617,6 +672,7 @@ func syncRepoDocPages(ctx context.Context, gh *apiClient, org string, repo Repo,
 			result.recordFile(destRel)
 			result.recordRepoFile(repo.Name, filePath)
 			if written {
+				result.recordChangedRepoFile(repo.Name, filePath)
 				logger.Info("wrote doc page", "src", filePath, "dest", destPath)
 			} else {
 				logger.Info("doc page unchanged", "src", filePath, "dest", destPath)

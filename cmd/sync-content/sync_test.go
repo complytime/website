@@ -1057,6 +1057,10 @@ func TestToMarkdown_FileManifest(t *testing.T) {
 			"complyctl":    {"docs/usage.md", "docs/api.md", "docs/installation.md"},
 			"complyscribe": {"docs/guide.md", "README.md"},
 		},
+		changedRepoFiles: map[string][]string{
+			"complyctl":    {"docs/usage.md", "docs/api.md", "docs/installation.md"},
+			"complyscribe": {"docs/guide.md", "README.md"},
+		},
 	}
 
 	md := result.toMarkdown()
@@ -1066,7 +1070,7 @@ func TestToMarkdown_FileManifest(t *testing.T) {
 		contains string
 	}{
 		{"collapsible", "<details>"},
-		{"summary count", "Synced files (5 across 2 repositories)"},
+		{"summary count", "Changed files (5 across 2 repositories)"},
 		{"complyctl header", "**complyctl** (3 files)"},
 		{"complyscribe header", "**complyscribe** (2 files)"},
 		{"file entry", "`docs/installation.md`"},
@@ -1091,6 +1095,69 @@ func TestToMarkdown_FileManifest(t *testing.T) {
 	idxScribe := strings.Index(md, "**complyscribe**")
 	if idxCtl > idxScribe {
 		t.Errorf("repos should be sorted alphabetically in file manifest")
+	}
+}
+
+func TestToMarkdown_FileManifestSplitsChangedAndUnchanged(t *testing.T) {
+	result := &syncResult{
+		synced:         2,
+		filesProcessed: 5,
+		updated:        []string{"complyctl"},
+		added:          []string{"complyscribe"},
+		repoDetails: map[string]repoSummary{
+			"complyctl":    {htmlURL: "https://github.com/org/complyctl", newSHA: "aaa"},
+			"complyscribe": {htmlURL: "https://github.com/org/complyscribe", newSHA: "bbb"},
+		},
+		repoFiles: map[string][]string{
+			"complyctl":    {"docs/usage.md", "docs/api.md", "docs/installation.md"},
+			"complyscribe": {"docs/guide.md", "README.md"},
+		},
+		changedRepoFiles: map[string][]string{
+			"complyctl": {"docs/api.md"},
+		},
+	}
+
+	md := result.toMarkdown()
+
+	checks := []struct {
+		name     string
+		contains string
+	}{
+		{"changed section", "Changed files (1 across 1 repository)"},
+		{"unchanged section", "Unchanged files (4 across 2 repositories)"},
+		{"changed file", "`docs/api.md`"},
+		{"unchanged file", "`docs/usage.md`"},
+		{"unchanged file", "`docs/installation.md`"},
+		{"unchanged file", "`docs/guide.md`"},
+		{"unchanged file", "`README.md`"},
+	}
+	for _, tc := range checks {
+		if !strings.Contains(md, tc.contains) {
+			t.Errorf("%s: expected markdown to contain %q\n\nGot:\n%s", tc.name, tc.contains, md)
+		}
+	}
+
+	if strings.Contains(md, "Synced files") {
+		t.Errorf("should not use old 'Synced files' label\n\nGot:\n%s", md)
+	}
+}
+
+func TestToMarkdown_FileManifestAllUnchanged(t *testing.T) {
+	result := &syncResult{
+		synced:  1,
+		updated: []string{"complyctl"},
+		repoFiles: map[string][]string{
+			"complyctl": {"docs/api.md", "docs/usage.md"},
+		},
+	}
+
+	md := result.toMarkdown()
+
+	if strings.Contains(md, "Changed files") {
+		t.Errorf("should not show changed section when no files changed\n\nGot:\n%s", md)
+	}
+	if !strings.Contains(md, "Unchanged files (2 across 1 repository)") {
+		t.Errorf("expected unchanged files section\n\nGot:\n%s", md)
 	}
 }
 
@@ -1158,6 +1225,10 @@ func TestSyncRepoDocPages_RecordsRepoFiles(t *testing.T) {
 		if len(files) != 2 {
 			t.Fatalf("repoFiles[test-repo] = %d files, want 2", len(files))
 		}
+		changed := result.changedRepoFiles["test-repo"]
+		if len(changed) != 2 {
+			t.Fatalf("changedRepoFiles[test-repo] = %d files, want 2 (first write)", len(changed))
+		}
 	})
 
 	t.Run("dry-run records files", func(t *testing.T) {
@@ -1168,6 +1239,29 @@ func TestSyncRepoDocPages_RecordsRepoFiles(t *testing.T) {
 		files := result.repoFiles["test-repo"]
 		if len(files) != 2 {
 			t.Fatalf("dry-run repoFiles[test-repo] = %d files, want 2", len(files))
+		}
+		if result.changedRepoFiles != nil {
+			t.Error("dry-run should not populate changedRepoFiles")
+		}
+	})
+
+	t.Run("second write records unchanged files", func(t *testing.T) {
+		output := t.TempDir()
+		// First write creates the files
+		result1 := &syncResult{}
+		syncRepoDocPages(ctx, gh, "testorg", repo, output, true, discovery, nil, nil, result1, "")
+
+		// Second write with identical content — nothing should change
+		result2 := &syncResult{}
+		syncRepoDocPages(ctx, gh, "testorg", repo, output, true, discovery, nil, nil, result2, "")
+
+		files := result2.repoFiles["test-repo"]
+		if len(files) != 2 {
+			t.Fatalf("repoFiles[test-repo] = %d files, want 2", len(files))
+		}
+		changed := result2.changedRepoFiles["test-repo"]
+		if len(changed) != 0 {
+			t.Errorf("changedRepoFiles[test-repo] = %d files, want 0 (content unchanged)", len(changed))
 		}
 	})
 }
