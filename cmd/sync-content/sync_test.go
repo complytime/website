@@ -267,8 +267,8 @@ func TestSyncConfigSource(t *testing.T) {
 		if result.errors > 0 {
 			t.Fatalf("syncConfigSource had %d errors", result.errors)
 		}
-		if result.synced != 1 {
-			t.Errorf("synced = %d, want 1", result.synced)
+		if result.filesProcessed != 1 {
+			t.Errorf("filesProcessed = %d, want 1", result.filesProcessed)
 		}
 
 		destPath := filepath.Join(output, "content", "docs", "projects", "complyctl", "_index.md")
@@ -300,8 +300,8 @@ func TestSyncConfigSource(t *testing.T) {
 		result := &syncResult{}
 		syncConfigSource(ctx, gh, src, Defaults{Branch: "main"}, dryOutput, false, result, "")
 
-		if result.synced != 1 {
-			t.Errorf("dry-run synced = %d, want 1", result.synced)
+		if result.filesProcessed != 1 {
+			t.Errorf("dry-run filesProcessed = %d, want 1", result.filesProcessed)
 		}
 
 		destPath := filepath.Join(dryOutput, "content", "docs", "projects", "complyctl", "_index.md")
@@ -465,8 +465,8 @@ func TestSyncRepoDocPages(t *testing.T) {
 	if result.errors != 0 {
 		t.Fatalf("errors = %d, want 0", result.errors)
 	}
-	if result.synced != 2 {
-		t.Errorf("synced = %d, want 2", result.synced)
+	if result.filesProcessed != 2 {
+		t.Errorf("filesProcessed = %d, want 2", result.filesProcessed)
 	}
 
 	cases := []struct {
@@ -587,8 +587,8 @@ func TestSyncRepoDocPages_SkipsConfigTracked(t *testing.T) {
 		t.Fatalf("non-tracked file should have been written: %v", err)
 	}
 
-	if result.synced != 1 {
-		t.Errorf("synced = %d, want 1 (only the non-tracked file)", result.synced)
+	if result.filesProcessed != 1 {
+		t.Errorf("filesProcessed = %d, want 1 (only the non-tracked file)", result.filesProcessed)
 	}
 }
 
@@ -874,8 +874,466 @@ func TestSyncRepoDocPages_SkipsIndexMD(t *testing.T) {
 		t.Fatalf("usage.md should have been written: %v", err)
 	}
 
-	if result.synced != 1 {
-		t.Errorf("synced = %d, want 1 (only usage.md)", result.synced)
+	if result.filesProcessed != 1 {
+		t.Errorf("filesProcessed = %d, want 1 (only usage.md)", result.filesProcessed)
+	}
+}
+
+func TestToMarkdown_NewRepos(t *testing.T) {
+	result := &syncResult{
+		synced:  4,
+		skipped: 2,
+		added:   []string{"complyctl", "complyscribe"},
+		repoDetails: map[string]repoSummary{
+			"complyctl": {
+				description: "CLI for compliance",
+				newSHA:      "9515e3dafb25a8f4b17e61ebcc79d4a1668cd6af",
+				htmlURL:     "https://github.com/complytime/complyctl",
+			},
+			"complyscribe": {
+				description: "Compliance authoring tool",
+				newSHA:      "e04417ca36b2c8a27ddd415276dbc280b22551da",
+				htmlURL:     "https://github.com/complytime/complyscribe",
+			},
+		},
+	}
+
+	md := result.toMarkdown()
+
+	checks := []struct {
+		name     string
+		contains string
+	}{
+		{"section header", "### New Repositories"},
+		{"linked repo name", "[`complyctl`](https://github.com/complytime/complyctl)"},
+		{"description", "CLI for compliance"},
+		{"short SHA", "9515e3da"},
+		{"commit link", "https://github.com/complytime/complyctl/commit/9515e3dafb25a8f4b17e61ebcc79d4a1668cd6af"},
+		{"stats", "**Repositories**: 4 synced, 2 skipped"},
+	}
+	for _, tc := range checks {
+		if !strings.Contains(md, tc.contains) {
+			t.Errorf("%s: expected markdown to contain %q\n\nGot:\n%s", tc.name, tc.contains, md)
+		}
+	}
+}
+
+func TestToMarkdown_UpdatedWithCompareLink(t *testing.T) {
+	result := &syncResult{
+		synced:  2,
+		skipped: 0,
+		updated: []string{"complyctl"},
+		repoDetails: map[string]repoSummary{
+			"complyctl": {
+				description: "CLI tool",
+				newSHA:      "ef01ab2345678900000000000000000000000000",
+				oldSHA:      "9515e3dafb25a8f4b17e61ebcc79d4a1668cd6af",
+				htmlURL:     "https://github.com/complytime/complyctl",
+			},
+		},
+	}
+
+	md := result.toMarkdown()
+
+	checks := []struct {
+		name     string
+		contains string
+	}{
+		{"section header", "### Updated"},
+		{"linked repo name", "[`complyctl`](https://github.com/complytime/complyctl)"},
+		{"old short SHA", "9515e3da"},
+		{"new short SHA", "ef01ab23"},
+		{"compare link", "https://github.com/complytime/complyctl/compare/9515e3dafb25a8f4b17e61ebcc79d4a1668cd6af...ef01ab2345678900000000000000000000000000"},
+	}
+	for _, tc := range checks {
+		if !strings.Contains(md, tc.contains) {
+			t.Errorf("%s: expected markdown to contain %q\n\nGot:\n%s", tc.name, tc.contains, md)
+		}
+	}
+}
+
+func TestToMarkdown_UnchangedCollapsible(t *testing.T) {
+	result := &syncResult{
+		synced:    5,
+		skipped:   0,
+		added:     []string{"new-repo"},
+		unchanged: []string{"stable-b", "stable-a"},
+		repoDetails: map[string]repoSummary{
+			"new-repo": {
+				description: "New tool",
+				newSHA:      "aaaa",
+				htmlURL:     "https://github.com/org/new-repo",
+			},
+		},
+	}
+
+	md := result.toMarkdown()
+
+	if !strings.Contains(md, "<details>") {
+		t.Errorf("expected collapsible section for unchanged repos\n\nGot:\n%s", md)
+	}
+	if !strings.Contains(md, "Unchanged (2 repositories)") {
+		t.Errorf("expected unchanged count in summary\n\nGot:\n%s", md)
+	}
+	// Unchanged repos should be sorted
+	idxA := strings.Index(md, "stable-a")
+	idxB := strings.Index(md, "stable-b")
+	if idxA > idxB {
+		t.Errorf("unchanged repos should be sorted alphabetically, got stable-b before stable-a")
+	}
+}
+
+func TestToMarkdown_NoChanges(t *testing.T) {
+	result := &syncResult{
+		synced:  3,
+		skipped: 1,
+	}
+
+	md := result.toMarkdown()
+
+	if !strings.Contains(md, "No changes detected.") {
+		t.Errorf("expected 'No changes detected' when no changes\n\nGot:\n%s", md)
+	}
+}
+
+func TestToMarkdown_FallbackWithoutDetails(t *testing.T) {
+	result := &syncResult{
+		synced: 1,
+		added:  []string{"bare-repo"},
+	}
+
+	md := result.toMarkdown()
+
+	if !strings.Contains(md, "- `bare-repo`") {
+		t.Errorf("expected fallback plain name when no repoDetails\n\nGot:\n%s", md)
+	}
+}
+
+func TestToMarkdown_FilesProcessedLine(t *testing.T) {
+	result := &syncResult{
+		synced:         4,
+		skipped:        2,
+		filesProcessed: 33,
+		added:          []string{"complyctl"},
+		repoDetails: map[string]repoSummary{
+			"complyctl": {htmlURL: "https://github.com/org/complyctl", newSHA: "abc"},
+		},
+	}
+
+	md := result.toMarkdown()
+
+	if !strings.Contains(md, "**Repositories**: 4 synced, 2 skipped") {
+		t.Errorf("expected repo stats line\n\nGot:\n%s", md)
+	}
+	if !strings.Contains(md, "**Files processed**: 33") {
+		t.Errorf("expected files processed line\n\nGot:\n%s", md)
+	}
+}
+
+func TestToMarkdown_NoFilesProcessedWhenZero(t *testing.T) {
+	result := &syncResult{
+		synced:  2,
+		skipped: 1,
+		added:   []string{"repo-a"},
+	}
+
+	md := result.toMarkdown()
+
+	if strings.Contains(md, "Files processed") {
+		t.Errorf("should not show files processed line when count is 0\n\nGot:\n%s", md)
+	}
+}
+
+func TestToMarkdown_FileManifest(t *testing.T) {
+	result := &syncResult{
+		synced:         2,
+		filesProcessed: 5,
+		added:          []string{"complyctl", "complyscribe"},
+		repoDetails: map[string]repoSummary{
+			"complyctl":    {htmlURL: "https://github.com/org/complyctl", newSHA: "aaa"},
+			"complyscribe": {htmlURL: "https://github.com/org/complyscribe", newSHA: "bbb"},
+		},
+		repoFiles: map[string][]string{
+			"complyctl":    {"docs/usage.md", "docs/api.md", "docs/installation.md"},
+			"complyscribe": {"docs/guide.md", "README.md"},
+		},
+		changedRepoFiles: map[string][]string{
+			"complyctl":    {"docs/usage.md", "docs/api.md", "docs/installation.md"},
+			"complyscribe": {"docs/guide.md", "README.md"},
+		},
+	}
+
+	md := result.toMarkdown()
+
+	checks := []struct {
+		name     string
+		contains string
+	}{
+		{"collapsible", "<details>"},
+		{"summary count", "Changed files (5 across 2 repositories)"},
+		{"complyctl header", "**complyctl** (3 files)"},
+		{"complyscribe header", "**complyscribe** (2 files)"},
+		{"file entry", "`docs/installation.md`"},
+		{"file entry", "`docs/guide.md`"},
+	}
+	for _, tc := range checks {
+		if !strings.Contains(md, tc.contains) {
+			t.Errorf("%s: expected markdown to contain %q\n\nGot:\n%s", tc.name, tc.contains, md)
+		}
+	}
+
+	// Files within a repo should be sorted
+	idxAPI := strings.Index(md, "docs/api.md")
+	idxInstall := strings.Index(md, "docs/installation.md")
+	idxUsage := strings.Index(md, "docs/usage.md")
+	if idxAPI >= idxInstall || idxInstall >= idxUsage {
+		t.Errorf("files should be sorted alphabetically within a repo\n\nGot:\n%s", md)
+	}
+
+	// Repos should be sorted
+	idxCtl := strings.Index(md, "**complyctl**")
+	idxScribe := strings.Index(md, "**complyscribe**")
+	if idxCtl > idxScribe {
+		t.Errorf("repos should be sorted alphabetically in file manifest")
+	}
+}
+
+func TestToMarkdown_FileManifestSplitsChangedAndUnchanged(t *testing.T) {
+	result := &syncResult{
+		synced:         2,
+		filesProcessed: 5,
+		updated:        []string{"complyctl"},
+		added:          []string{"complyscribe"},
+		repoDetails: map[string]repoSummary{
+			"complyctl":    {htmlURL: "https://github.com/org/complyctl", newSHA: "aaa"},
+			"complyscribe": {htmlURL: "https://github.com/org/complyscribe", newSHA: "bbb"},
+		},
+		repoFiles: map[string][]string{
+			"complyctl":    {"docs/usage.md", "docs/api.md", "docs/installation.md"},
+			"complyscribe": {"docs/guide.md", "README.md"},
+		},
+		changedRepoFiles: map[string][]string{
+			"complyctl": {"docs/api.md"},
+		},
+	}
+
+	md := result.toMarkdown()
+
+	checks := []struct {
+		name     string
+		contains string
+	}{
+		{"changed section", "Changed files (1 across 1 repository)"},
+		{"unchanged section", "Unchanged files (4 across 2 repositories)"},
+		{"changed file", "`docs/api.md`"},
+		{"unchanged file", "`docs/usage.md`"},
+		{"unchanged file", "`docs/installation.md`"},
+		{"unchanged file", "`docs/guide.md`"},
+		{"unchanged file", "`README.md`"},
+	}
+	for _, tc := range checks {
+		if !strings.Contains(md, tc.contains) {
+			t.Errorf("%s: expected markdown to contain %q\n\nGot:\n%s", tc.name, tc.contains, md)
+		}
+	}
+
+	if strings.Contains(md, "Synced files") {
+		t.Errorf("should not use old 'Synced files' label\n\nGot:\n%s", md)
+	}
+}
+
+func TestToMarkdown_FileManifestAllUnchanged(t *testing.T) {
+	result := &syncResult{
+		synced:  1,
+		updated: []string{"complyctl"},
+		repoFiles: map[string][]string{
+			"complyctl": {"docs/api.md", "docs/usage.md"},
+		},
+	}
+
+	md := result.toMarkdown()
+
+	if strings.Contains(md, "Changed files") {
+		t.Errorf("should not show changed section when no files changed\n\nGot:\n%s", md)
+	}
+	if !strings.Contains(md, "Unchanged files (2 across 1 repository)") {
+		t.Errorf("expected unchanged files section\n\nGot:\n%s", md)
+	}
+}
+
+func TestToMarkdown_NoFileManifestWhenEmpty(t *testing.T) {
+	result := &syncResult{
+		synced: 1,
+		added:  []string{"repo-a"},
+	}
+
+	md := result.toMarkdown()
+
+	if strings.Contains(md, "Synced files") {
+		t.Errorf("should not show file manifest when no files tracked\n\nGot:\n%s", md)
+	}
+}
+
+func TestSyncRepoDocPages_RecordsRepoFiles(t *testing.T) {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/repos/testorg/test-repo/contents/docs", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]DirEntry{
+			{Name: "installation.md", Path: "docs/installation.md", Type: "file"},
+			{Name: "usage.md", Path: "docs/usage.md", Type: "file"},
+		})
+	})
+	mux.HandleFunc("/repos/testorg/test-repo/contents/docs/installation.md", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(FileResponse{
+			Content:  b64("# Installation\n\nSteps."),
+			Encoding: "base64",
+			SHA:      "sha-install",
+		})
+	})
+	mux.HandleFunc("/repos/testorg/test-repo/contents/docs/usage.md", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(FileResponse{
+			Content:  b64("# Usage\n\nRun it."),
+			Encoding: "base64",
+			SHA:      "sha-usage",
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	gh := newTestClient(server.URL)
+	ctx := context.Background()
+
+	repo := Repo{
+		Name:          "test-repo",
+		FullName:      "testorg/test-repo",
+		Description:   "A test repository",
+		Language:      "Go",
+		HTMLURL:       "https://github.com/testorg/test-repo",
+		DefaultBranch: "main",
+		PushedAt:      "2025-01-15T00:00:00Z",
+	}
+
+	discovery := Discovery{ScanPaths: []string{"docs"}}
+
+	t.Run("write mode records files", func(t *testing.T) {
+		output := t.TempDir()
+		result := &syncResult{}
+		syncRepoDocPages(ctx, gh, "testorg", repo, output, true, discovery, nil, nil, result, "")
+
+		files := result.repoFiles["test-repo"]
+		if len(files) != 2 {
+			t.Fatalf("repoFiles[test-repo] = %d files, want 2", len(files))
+		}
+		changed := result.changedRepoFiles["test-repo"]
+		if len(changed) != 2 {
+			t.Fatalf("changedRepoFiles[test-repo] = %d files, want 2 (first write)", len(changed))
+		}
+	})
+
+	t.Run("dry-run records files", func(t *testing.T) {
+		output := t.TempDir()
+		result := &syncResult{}
+		syncRepoDocPages(ctx, gh, "testorg", repo, output, false, discovery, nil, nil, result, "")
+
+		files := result.repoFiles["test-repo"]
+		if len(files) != 2 {
+			t.Fatalf("dry-run repoFiles[test-repo] = %d files, want 2", len(files))
+		}
+		if result.changedRepoFiles != nil {
+			t.Error("dry-run should not populate changedRepoFiles")
+		}
+	})
+
+	t.Run("second write records unchanged files", func(t *testing.T) {
+		output := t.TempDir()
+		// First write creates the files
+		result1 := &syncResult{}
+		syncRepoDocPages(ctx, gh, "testorg", repo, output, true, discovery, nil, nil, result1, "")
+
+		// Second write with identical content — nothing should change
+		result2 := &syncResult{}
+		syncRepoDocPages(ctx, gh, "testorg", repo, output, true, discovery, nil, nil, result2, "")
+
+		files := result2.repoFiles["test-repo"]
+		if len(files) != 2 {
+			t.Fatalf("repoFiles[test-repo] = %d files, want 2", len(files))
+		}
+		changed := result2.changedRepoFiles["test-repo"]
+		if len(changed) != 0 {
+			t.Errorf("changedRepoFiles[test-repo] = %d files, want 0 (content unchanged)", len(changed))
+		}
+	})
+}
+
+func TestToMarkdown_SortedOutput(t *testing.T) {
+	result := &syncResult{
+		synced: 3,
+		added:  []string{"zebra", "alpha", "middle"},
+		repoDetails: map[string]repoSummary{
+			"zebra":  {htmlURL: "https://github.com/org/zebra", newSHA: "aaa"},
+			"alpha":  {htmlURL: "https://github.com/org/alpha", newSHA: "bbb"},
+			"middle": {htmlURL: "https://github.com/org/middle", newSHA: "ccc"},
+		},
+	}
+
+	md := result.toMarkdown()
+
+	idxAlpha := strings.Index(md, "alpha")
+	idxMiddle := strings.Index(md, "middle")
+	idxZebra := strings.Index(md, "zebra")
+	if idxAlpha >= idxMiddle || idxMiddle >= idxZebra {
+		t.Errorf("expected sorted order alpha < middle < zebra in markdown\n\nGot:\n%s", md)
+	}
+}
+
+func TestProcessRepo_RecordsRepoDetail(t *testing.T) {
+	branchSHA := "abc123def456"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/testorg/test-repo/readme", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(FileResponse{
+			Content:  b64("# test-repo\n\nContent."),
+			Encoding: "base64",
+			SHA:      "sha-readme",
+		})
+	})
+	mux.HandleFunc("/repos/testorg/test-repo/branches/main", func(w http.ResponseWriter, r *http.Request) {
+		resp := BranchResponse{}
+		resp.Commit.SHA = branchSHA
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	gh := newTestClient(server.URL)
+	output := t.TempDir()
+
+	repo := Repo{
+		Name:          "test-repo",
+		FullName:      "testorg/test-repo",
+		Description:   "A test repository",
+		Language:      "Go",
+		HTMLURL:       "https://github.com/testorg/test-repo",
+		DefaultBranch: "main",
+	}
+
+	result := &syncResult{}
+	processRepo(context.Background(), gh, "testorg", output, repo, true, false, result, map[string]repoState{}, nil, "")
+
+	detail, ok := result.repoDetails["test-repo"]
+	if !ok {
+		t.Fatal("processRepo should record repoDetails for test-repo")
+	}
+	if detail.description != "A test repository" {
+		t.Errorf("description = %q, want %q", detail.description, "A test repository")
+	}
+	if detail.newSHA != branchSHA {
+		t.Errorf("newSHA = %q, want %q", detail.newSHA, branchSHA)
+	}
+	if detail.htmlURL != "https://github.com/testorg/test-repo" {
+		t.Errorf("htmlURL = %q, want %q", detail.htmlURL, "https://github.com/testorg/test-repo")
 	}
 }
 

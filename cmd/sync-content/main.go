@@ -412,6 +412,15 @@ func run() int {
 		}
 	}
 
+	if lock != nil && len(lock.Repos) > 0 {
+		for name, oldSHA := range lock.Repos {
+			if detail, ok := result.repoDetails[name]; ok {
+				detail.oldSHA = oldSHA
+				result.repoDetails[name] = detail
+			}
+		}
+	}
+
 	result.printSummary()
 	writeGitHubOutputs(&result)
 

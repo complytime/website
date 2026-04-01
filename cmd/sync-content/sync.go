@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -23,18 +24,30 @@ type repoState struct {
 	readmeSHA string
 }
 
+// repoSummary holds metadata for a single repo used in the sync summary.
+type repoSummary struct {
+	description string
+	newSHA      string
+	oldSHA      string
+	htmlURL     string
+}
+
 // syncResult tracks outcomes for the final summary and exit code.
 type syncResult struct {
-	mu           sync.Mutex
-	synced       int
-	skipped      int
-	warnings     int
-	errors       int
-	added        []string
-	updated      []string
-	removed      []string
-	unchanged    []string
-	writtenFiles []string
+	mu               sync.Mutex
+	synced           int
+	skipped          int
+	filesProcessed   int
+	warnings         int
+	errors           int
+	added            []string
+	updated          []string
+	removed          []string
+	unchanged        []string
+	writtenFiles     []string
+	repoDetails      map[string]repoSummary
+	repoFiles        map[string][]string
+	changedRepoFiles map[string][]string
 }
 
 // recordFile appends a relative file path to the manifest of files written
@@ -45,44 +58,134 @@ func (r *syncResult) recordFile(relPath string) {
 	r.mu.Unlock()
 }
 
-func (r *syncResult) addError()   { r.mu.Lock(); r.errors++; r.mu.Unlock() }
-func (r *syncResult) addWarning() { r.mu.Lock(); r.warnings++; r.mu.Unlock() }
-func (r *syncResult) addSynced()  { r.mu.Lock(); r.synced++; r.mu.Unlock() }
+func (r *syncResult) addError()         { r.mu.Lock(); r.errors++; r.mu.Unlock() }
+func (r *syncResult) addWarning()       { r.mu.Lock(); r.warnings++; r.mu.Unlock() }
+func (r *syncResult) addSynced()        { r.mu.Lock(); r.synced++; r.mu.Unlock() }
+func (r *syncResult) addFileProcessed() { r.mu.Lock(); r.filesProcessed++; r.mu.Unlock() }
+
+func (r *syncResult) recordRepoDetail(name string, detail repoSummary) {
+	r.mu.Lock()
+	if r.repoDetails == nil {
+		r.repoDetails = make(map[string]repoSummary)
+	}
+	r.repoDetails[name] = detail
+	r.mu.Unlock()
+}
+
+func (r *syncResult) recordRepoFile(repoName, srcPath string) {
+	r.mu.Lock()
+	if r.repoFiles == nil {
+		r.repoFiles = make(map[string][]string)
+	}
+	r.repoFiles[repoName] = append(r.repoFiles[repoName], srcPath)
+	r.mu.Unlock()
+}
+
+func (r *syncResult) recordChangedRepoFile(repoName, srcPath string) {
+	r.mu.Lock()
+	if r.changedRepoFiles == nil {
+		r.changedRepoFiles = make(map[string][]string)
+	}
+	r.changedRepoFiles[repoName] = append(r.changedRepoFiles[repoName], srcPath)
+	r.mu.Unlock()
+}
 
 func (r *syncResult) hasChanges() bool {
 	return len(r.added) > 0 || len(r.updated) > 0 || len(r.removed) > 0
+}
+
+func shortSHA(sha string) string {
+	if len(sha) > 8 {
+		return sha[:8]
+	}
+	return sha
+}
+
+func (r *syncResult) writeRepoLine(b *strings.Builder, name string) {
+	detail, ok := r.repoDetails[name]
+	if !ok || detail.htmlURL == "" {
+		fmt.Fprintf(b, "- `%s`\n", name)
+		return
+	}
+	fmt.Fprintf(b, "- [`%s`](%s)", name, detail.htmlURL)
+	if detail.description != "" {
+		fmt.Fprintf(b, " — %s", detail.description)
+	}
+	b.WriteString("\n")
+}
+
+func (r *syncResult) writeNewRepoBlock(b *strings.Builder, name string) {
+	r.writeRepoLine(b, name)
+	detail, ok := r.repoDetails[name]
+	if ok && detail.newSHA != "" && detail.newSHA != "unknown" {
+		fmt.Fprintf(b, "  - Pinned to [`%s`](%s/commit/%s)\n",
+			shortSHA(detail.newSHA), detail.htmlURL, detail.newSHA)
+	}
+}
+
+func (r *syncResult) writeUpdatedRepoBlock(b *strings.Builder, name string) {
+	r.writeRepoLine(b, name)
+	detail, ok := r.repoDetails[name]
+	if !ok {
+		return
+	}
+	switch {
+	case detail.oldSHA != "" && detail.newSHA != "" && detail.newSHA != "unknown":
+		fmt.Fprintf(b, "  - [`%s...%s`](%s/compare/%s...%s)\n",
+			shortSHA(detail.oldSHA), shortSHA(detail.newSHA),
+			detail.htmlURL, detail.oldSHA, detail.newSHA)
+	case detail.newSHA != "" && detail.newSHA != "unknown":
+		fmt.Fprintf(b, "  - Pinned to [`%s`](%s/commit/%s)\n",
+			shortSHA(detail.newSHA), detail.htmlURL, detail.newSHA)
+	}
 }
 
 func (r *syncResult) toMarkdown() string {
 	var b strings.Builder
 	b.WriteString("## Content Sync Summary\n\n")
 
-	if len(r.added) > 0 {
+	added := append([]string(nil), r.added...)
+	updated := append([]string(nil), r.updated...)
+	removed := append([]string(nil), r.removed...)
+	unchanged := append([]string(nil), r.unchanged...)
+	sort.Strings(added)
+	sort.Strings(updated)
+	sort.Strings(removed)
+	sort.Strings(unchanged)
+
+	if len(added) > 0 {
 		b.WriteString("### New Repositories\n\n")
-		for _, name := range r.added {
-			fmt.Fprintf(&b, "- `%s`\n", name)
+		for _, name := range added {
+			r.writeNewRepoBlock(&b, name)
 		}
 		b.WriteString("\n")
 	}
-	if len(r.updated) > 0 {
+	if len(updated) > 0 {
 		b.WriteString("### Updated\n\n")
-		for _, name := range r.updated {
-			fmt.Fprintf(&b, "- `%s`\n", name)
+		for _, name := range updated {
+			r.writeUpdatedRepoBlock(&b, name)
 		}
 		b.WriteString("\n")
 	}
-	if len(r.removed) > 0 {
+	if len(removed) > 0 {
 		b.WriteString("### Removed\n\n")
-		for _, name := range r.removed {
+		for _, name := range removed {
 			fmt.Fprintf(&b, "- `%s`\n", name)
 		}
 		b.WriteString("\n")
 	}
-	if !r.hasChanges() {
+	if len(unchanged) > 0 {
+		fmt.Fprintf(&b, "<details>\n<summary>Unchanged (%d repositories)</summary>\n\n", len(unchanged))
+		for _, name := range unchanged {
+			fmt.Fprintf(&b, "- `%s`\n", name)
+		}
+		b.WriteString("\n</details>\n\n")
+	}
+	if !r.hasChanges() && len(unchanged) == 0 {
 		b.WriteString("No changes detected.\n\n")
 	}
 
-	fmt.Fprintf(&b, "**Stats**: %d synced, %d skipped",
+	fmt.Fprintf(&b, "**Repositories**: %d synced, %d skipped",
 		r.synced, r.skipped)
 	if r.warnings > 0 {
 		fmt.Fprintf(&b, ", %d warnings", r.warnings)
@@ -91,14 +194,95 @@ func (r *syncResult) toMarkdown() string {
 		fmt.Fprintf(&b, ", %d errors", r.errors)
 	}
 	b.WriteString("\n")
+	if r.filesProcessed > 0 {
+		fmt.Fprintf(&b, "**Files processed**: %d\n", r.filesProcessed)
+	}
+
+	r.writeFileManifest(&b)
 
 	return b.String()
 }
 
+type repoFileGroup struct {
+	name  string
+	files []string
+}
+
+func (r *syncResult) writeFileManifest(b *strings.Builder) {
+	if len(r.repoFiles) == 0 {
+		return
+	}
+
+	changedSet := make(map[string]map[string]bool)
+	for repo, files := range r.changedRepoFiles {
+		s := make(map[string]bool, len(files))
+		for _, f := range files {
+			s[f] = true
+		}
+		changedSet[repo] = s
+	}
+
+	var changedGroups, unchangedGroups []repoFileGroup
+	totalChanged, totalUnchanged := 0, 0
+
+	repoNames := make([]string, 0, len(r.repoFiles))
+	for name := range r.repoFiles {
+		repoNames = append(repoNames, name)
+	}
+	sort.Strings(repoNames)
+
+	for _, name := range repoNames {
+		cs := changedSet[name]
+		var changed, unchanged []string
+		for _, f := range r.repoFiles[name] {
+			if cs[f] {
+				changed = append(changed, f)
+			} else {
+				unchanged = append(unchanged, f)
+			}
+		}
+		sort.Strings(changed)
+		sort.Strings(unchanged)
+		if len(changed) > 0 {
+			changedGroups = append(changedGroups, repoFileGroup{name, changed})
+			totalChanged += len(changed)
+		}
+		if len(unchanged) > 0 {
+			unchangedGroups = append(unchangedGroups, repoFileGroup{name, unchanged})
+			totalUnchanged += len(unchanged)
+		}
+	}
+
+	writeFileSection(b, changedGroups, totalChanged, "Changed files")
+	writeFileSection(b, unchangedGroups, totalUnchanged, "Unchanged files")
+}
+
+func writeFileSection(b *strings.Builder, groups []repoFileGroup, total int, label string) {
+	if total == 0 {
+		return
+	}
+	repoWord := "repositories"
+	if len(groups) == 1 {
+		repoWord = "repository"
+	}
+	fmt.Fprintf(b, "\n<details>\n<summary>%s (%d across %d %s)</summary>\n\n",
+		label, total, len(groups), repoWord)
+	for _, g := range groups {
+		fmt.Fprintf(b, "**%s** (%d files)\n\n", g.name, len(g.files))
+		for _, f := range g.files {
+			fmt.Fprintf(b, "- `%s`\n", f)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("</details>\n")
+}
+
 func (r *syncResult) printSummary() {
 	slog.Info("sync summary",
-		"synced", r.synced,
-		"skipped", r.skipped,
+		"repos_synced", r.synced,
+		"repos_skipped", r.skipped,
+		"repos_unchanged", len(r.unchanged),
+		"files_processed", r.filesProcessed,
 		"warnings", r.warnings,
 		"errors", r.errors,
 	)
@@ -195,7 +379,8 @@ func syncConfigSource(ctx context.Context, gh *apiClient, src Source, defaults D
 
 		if !write {
 			logger.Info("would write config file (dry-run)", "src", file.Src, "dest", destPath)
-			result.addSynced()
+			result.recordRepoFile(repoName, file.Src)
+			result.addFileProcessed()
 			continue
 		}
 
@@ -207,14 +392,16 @@ func syncConfigSource(ctx context.Context, gh *apiClient, src Source, defaults D
 		}
 
 		result.recordFile(file.Dest)
+		result.recordRepoFile(repoName, file.Src)
 
 		if written {
+			result.recordChangedRepoFile(repoName, file.Src)
 			logger.Info("wrote config file", "src", file.Src, "dest", destPath)
 		} else {
 			logger.Info("config file unchanged", "src", file.Src, "dest", destPath)
 		}
 
-		result.addSynced()
+		result.addFileProcessed()
 	}
 }
 
@@ -260,6 +447,12 @@ func processRepo(ctx context.Context, gh *apiClient, org, output string, repo Re
 		sha = "unknown"
 		result.addWarning()
 	}
+
+	result.recordRepoDetail(repo.Name, repoSummary{
+		description: repo.Description,
+		newSHA:      sha,
+		htmlURL:     repo.HTMLURL,
+	})
 
 	old, existed := oldState[repo.Name]
 
@@ -447,7 +640,8 @@ func syncRepoDocPages(ctx context.Context, gh *apiClient, org string, repo Repo,
 
 			if !write {
 				logger.Info("would write doc page (dry-run)", "src", filePath, "dest", destRel)
-				result.addSynced()
+				result.recordRepoFile(repo.Name, filePath)
+				result.addFileProcessed()
 				continue
 			}
 
@@ -476,13 +670,15 @@ func syncRepoDocPages(ctx context.Context, gh *apiClient, org string, repo Repo,
 			}
 
 			result.recordFile(destRel)
+			result.recordRepoFile(repo.Name, filePath)
 			if written {
+				result.recordChangedRepoFile(repo.Name, filePath)
 				logger.Info("wrote doc page", "src", filePath, "dest", destPath)
 			} else {
 				logger.Info("doc page unchanged", "src", filePath, "dest", destPath)
 			}
 
-			result.addSynced()
+			result.addFileProcessed()
 		}
 
 		for dir := range neededDirs {
@@ -541,6 +737,7 @@ func writeGitHubOutputs(result *syncResult) {
 			}
 			_, _ = fmt.Fprintf(f, "has_changes=%s\n", hasChanges)
 			_, _ = fmt.Fprintf(f, "changed_count=%d\n", len(result.added)+len(result.updated))
+			_, _ = fmt.Fprintf(f, "files_processed=%d\n", result.filesProcessed)
 			_, _ = fmt.Fprintf(f, "error_count=%d\n", result.errors)
 		}
 	}
