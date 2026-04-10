@@ -37,8 +37,10 @@ jobs:
       - name: Derive PR title
         id: title
         if: steps.check.outputs.has_changes == 'true'
+        env:
+          CHANGED_REPOS: ${{ steps.check.outputs.changed_repos }}
         run: |
-          IFS=',' read -ra repos <<< "${{ steps.check.outputs.changed_repos }}"
+          IFS=',' read -ra repos <<< "$CHANGED_REPOS"
           count=${#repos[@]}
           if [ "$count" -le 3 ] && [ "$count" -gt 0 ]; then
             names=$(printf "%s, " "${repos[@]}"); names="${names%, }"
@@ -54,9 +56,7 @@ jobs:
         if: steps.check.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0
         with:
-          add-paths: |
-            .content-lock.json
-            content/
+          add-paths: .content-lock.json
           branch: automated/content-sync-update
           commit-message: "content: update upstream documentation lockfile"
           title: "${{ steps.title.outputs.pr_title }}"

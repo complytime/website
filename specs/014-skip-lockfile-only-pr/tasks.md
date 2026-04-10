@@ -57,7 +57,7 @@
 
 ## Phase 3: PR Richness Improvements
 
-**Purpose**: Surface richer context in automated PRs — dynamic title, repo names in body, doc file diffs.
+**Purpose**: Surface richer context in automated PRs — dynamic title, repo names in body, file manifest in PR description.
 
 - [x] T006 Add `changedRepos() []string` helper on `syncResult` in `cmd/sync-content/sync.go`: deduplicated, alphabetically sorted names from `added`, `updated`, and non-empty `changedRepoFiles` keys.
 - [x] T007 [P] Add `changedFilesCount() int` helper on `syncResult` in `cmd/sync-content/sync.go`: sum of lengths across all `changedRepoFiles` slices.
@@ -65,5 +65,5 @@
 - [x] T009 [P] Update `toMarkdown()` in `cmd/sync-content/sync.go` to prepend a `**Changed repository/repositories**: \`name\`` lead line when `changedRepos()` is non-empty.
 - [x] T010 [P] Add `TestChangedRepos` (6 subtests) and `TestChangedFilesCount` (4 subtests) in `cmd/sync-content/sync_test.go`.
 - [x] T011 Add "Derive PR title" step (`id: title`) to `.github/workflows/sync-content-check.yml` after the `check` step: reads `changed_repos`, uses names for ≤ 3 repos, count-based fallback for > 3 (singular-aware via `printf "%s, "` + strip trailing separator).
-- [x] T012 [P] Update "Create or update PR" step in `.github/workflows/sync-content-check.yml`: `title:` uses `${{ steps.title.outputs.pr_title }}`; `add-paths` expanded to include `content/`.
+- [x] T012 [P] Update "Create or update PR" step in `.github/workflows/sync-content-check.yml`: `title:` uses `${{ steps.title.outputs.pr_title }}`; `add-paths` kept as `.content-lock.json` only (`content/` removed — gitignored build artifacts; reviewer visibility provided by file manifest in PR body).
 - [x] T013 [P] Verify all tests pass: `go test ./cmd/sync-content/...` green; bash dry-run validates title logic for 2-repo, 4-repo, and boundary (3-repo) cases.

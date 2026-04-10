@@ -85,7 +85,7 @@ Follow-on improvements to the automated PR experience, building on the `has_chan
 | IMP-002 | `changedFilesCount() int` helper on `syncResult` — total written files across all repos |
 | IMP-003 | `GITHUB_OUTPUT` emits `changed_repos` (comma-separated) and `changed_files_count` (int) alongside existing outputs |
 | IMP-004 | Dynamic PR title derived from `changed_repos`: ≤ 3 repos shows names (`content: sync complyscribe, trestlebot`), > 3 repos shows count (`content: sync 4 repositories`, singular-aware) |
-| IMP-005 | PR commit `add-paths` expanded to include `content/` so doc file diffs appear in the PR file-change view |
+| IMP-005 | ~~PR commit `add-paths` expanded to include `content/`~~ — **Superseded**: doc files are gitignored build artifacts (`content/docs/projects/*/`); `add-paths: content/` is a no-op. Reviewer visibility is provided by the file manifest in the PR body (`writeFileManifest`) which lists every changed doc file grouped by repo. See review feedback from @marcusburghardt on PR #10. |
 | IMP-006 | `toMarkdown()` leads with a `**Changed repository/repositories**: \`name\`` line so repo names are visible at the top of the PR body |
 
 ### Functional Requirements
