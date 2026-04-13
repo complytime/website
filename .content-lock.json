@@ -1,7 +1,7 @@
 {
   "repos": {
-    "complyctl": "33de18301a5f24af4dcbb5ac03662d4fa5769591",
-    "complyscribe": "e04417ca36b2c8a27ddd415276dbc280b22551da",
+    "complyctl": "263e3242ade28c0ab838363f68e2d0030e6cf10b",
+    "complyscribe": "4c3045f7ecf801a1c738482be27fc0c9f4173815",
     "complytime": "d7a758dc7af3efd138e66570c431528ed88faf07",
     "complytime-collector-components": "6a22a47d7a9a2e1105bd5ae8afa14cd16e3ebc1d",
     "gemara-content-service": "3eb3e09cf5ec9b757f98e47816ea8ea4f6655e1e"
