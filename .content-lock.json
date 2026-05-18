@@ -1,10 +1,10 @@
 {
   "repos": {
-    "complyctl": "238e83fb07c84bbd083c7d996e6d96e6470b0464",
-    "complyscribe": "58c11f4e517d2bea5968a38968fc6e3b669f4c67",
+    "complyctl": "0fa6db64fc35267a004e8709418e2402cfe25bda",
+    "complyscribe": "8c204022b2e6ff56759c2d1b69aa62026b62d5ae",
     "complytime": "49c00b3974809ab72d280c7b24985ff53761f157",
-    "complytime-collector-components": "33c80346c3a60eb345265d3ea0aec6939dfcf03b",
-    "complytime-providers": "983b7891d982e522350a9200345d582dddbb07e2",
-    "gemara-content-service": "1072f2579983f0305dc25af6b31e97bd5ce46833"
+    "complytime-collector-components": "913c152a3a823a814b1edf7ceb49a2a086537ee3",
+    "complytime-providers": "2459f094376a3aee50805b0af1599d1562e7588b",
+    "gemara-content-service": "7aef79bfd8fb705d8f37b1cf441a59ab73667a3b"
   }
 }
