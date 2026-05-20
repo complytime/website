@@ -23,6 +23,11 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Sync content at current lock SHAs
+        run: go run ./cmd/sync-content --org complytime --config sync-config.yaml --lock .content-lock.json --write
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Update content lock
         run: go run ./cmd/sync-content --org complytime --config sync-config.yaml --lock .content-lock.json --update-lock
         env:
