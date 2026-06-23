@@ -1,11 +1,17 @@
 # https://megalinter.io/latest/supported-linters/
+ADDITIONAL_EXCLUDED_DIRECTORIES:
+  - vendor
 ENABLE_LINTERS:
+  - ACTION_ZIZMOR
   - ACTION_ACTIONLINT
+  - ANSIBLE_ANSIBLE_LINT
+  - BASH_SHELLCHECK
   - DOCKERFILE_HADOLINT
   - GO_GOLANGCI_LINT
   - MARKDOWN_MARKDOWNLINT
+  - PYTHON_RUFF
+  - PROTOBUF_PROTOLINT
   - REPOSITORY_GITLEAKS
   - REPOSITORY_KICS
   - YAML_YAMLLINT
-# fd54f200: "Missing User Instruction" — false positive for devcontainer Dockerfile
-REPOSITORY_KICS_ARGUMENTS: "--fail-on high --exclude-queries fd54f200-402c-4333-a5a4-36ef6709af2f"
+REPOSITORY_KICS_ARGUMENTS: "--fail-on high"
