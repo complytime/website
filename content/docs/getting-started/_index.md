@@ -3,7 +3,7 @@ title: "Getting Started"
 description: "Get started with ComplyTime in minutes."
 lead: "Get up and running with ComplyTime compliance automation tools."
 date: 2024-01-01T00:00:00+00:00
-lastmod: 2024-12-24T00:00:00+00:00
+lastmod: 2026-07-06T00:00:00+00:00
 draft: false
 images: []
 weight: 200
@@ -73,25 +73,57 @@ complyctl version
 
 Scanning providers are standalone executables placed in `~/.complytime/providers/`. The filename determines the evaluator ID (e.g. `complyctl-provider-openscap`).
 
+Pre-built Linux binaries are available from the [complytime-providers releases](https://github.com/complytime/complytime-providers/releases/latest) page. To build from source, see the [complytime-providers README](https://github.com/complytime/complytime-providers#install).
+
+Install the provider:
+
 ```bash
 mkdir -p ~/.complytime/providers
-cp bin/complyctl-provider-openscap ~/.complytime/providers/
+cp complyctl-provider-openscap ~/.complytime/providers/
 ```
 
 For the OpenSCAP provider, also install the required system packages:
 
-- `openscap-scanner`
-- `scap-security-guide`
+```bash
+sudo dnf install -y openscap-scanner scap-security-guide
+```
 
 ### Your First Compliance Scan
 
-**1. Initialize a workspace**
+**1. Create a workspace config**
 
-```bash
-complyctl init
+Create `complytime.yaml` in your working directory. This example uses the [CIS Fedora L1 Server](https://quay.io/complytime/policies-cis-fedora-l1-server) policy with the OpenSCAP provider:
+
+```yaml
+policies:
+  - url: quay.io/complytime/policies-cis-fedora-l1-server:latest
+    id: cis-fedora-l1-server
+
+targets:
+  - id: my-server
+    policies:
+      - cis-fedora-l1-server
+    variables:
+      profile: cis_server_l1
 ```
 
-Creates a `complytime.yaml` workspace config. If one already exists, it validates and runs `get` automatically.
+The `profile` variable is required by the OpenSCAP provider — it selects which [SSG](https://www.open-scap.org/security-policies/scap-security-guide/) profile to evaluate. List available profiles on your system with:
+
+```bash
+oscap info /usr/share/xml/scap/ssg/content/ssg-fedora-ds.xml
+```
+
+If the OpenSCAP provider cannot auto-detect the SCAP datastream for your distribution, set `datastream` explicitly:
+
+```yaml
+    variables:
+      profile: cis_server_l1
+      datastream: /usr/share/xml/scap/ssg/content/ssg-cs10-ds.xml
+```
+
+See the [OpenSCAP provider configuration](https://github.com/complytime/complytime-providers/blob/main/cmd/openscap-provider/docs/configuration.md) for all target variables and available profiles.
+
+Alternatively, run `complyctl init` for interactive workspace setup.
 
 **2. Fetch policies**
 
@@ -110,23 +142,23 @@ complyctl list
 **4. Generate assessment configuration**
 
 ```bash
-complyctl generate --policy-id <policy-id>
+complyctl generate --policy-id cis-fedora-l1-server
 ```
 
 **5. Run the scan**
 
 ```bash
 # EvaluationLog (default)
-complyctl scan --policy-id <policy-id>
+complyctl scan --policy-id cis-fedora-l1-server
 
 # Markdown report
-complyctl scan --policy-id <policy-id> --format pretty
+complyctl scan --policy-id cis-fedora-l1-server --format pretty
 
 # OSCAL assessment-results
-complyctl scan --policy-id <policy-id> --format oscal
+complyctl scan --policy-id cis-fedora-l1-server --format oscal
 
 # SARIF
-complyctl scan --policy-id <policy-id> --format sarif
+complyctl scan --policy-id cis-fedora-l1-server --format sarif
 ```
 
 Output is written to `./.complytime/scan/`.
