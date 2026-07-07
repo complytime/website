@@ -39,64 +39,29 @@
       <div class="row justify-content-center text-center mb-5">
         <div class="col-lg-8">
           <h2 class="h2 fw-bold">Engineering-First Compliance</h2>
-          <p class="lead text-body-secondary">An API-driven approach to compliance that integrates seamlessly with your development workflow.</p>
+          <div class="lead text-body-secondary summary-list">{{ (hugo.Data.positioning.problem).summary | markdownify }}</div>
         </div>
       </div>
+      {{- $icons := dict
+        "sparkles" `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>`
+        "shield-check" `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>`
+        "globe" `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>`
+        "clipboard-check" `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>`
+        "file-arrow-down" `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>`
+        "github" `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>`
+      -}}
       <div class="row justify-content-center text-center g-4">
+        {{- range hugo.Data.positioning.features }}
         <div class="col-lg-4 col-md-6">
           <div class="feature-card p-4 rounded-4 h-100">
             <div class="feature-icon mb-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+              {{ index $icons .icon | safeHTML }}
             </div>
-            <h3 class="h5 fw-semibold">Intelligent Automation</h3>
-            <p class="text-body-secondary mb-0">Automate compliance workflows with intelligent tools that understand your infrastructure and policies.</p>
+            <h3 class="h5 fw-semibold">{{ .title }}</h3>
+            <p class="text-body-secondary mb-0">{{ .text }}</p>
           </div>
         </div>
-        <div class="col-lg-4 col-md-6">
-          <div class="feature-card p-4 rounded-4 h-100">
-            <div class="feature-icon mb-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></svg>
-            </div>
-            <h3 class="h5 fw-semibold">Policy as Code</h3>
-            <p class="text-body-secondary mb-0">Define compliance requirements as code using OSCAL and integrate with your existing DevSecOps pipeline.</p>
-          </div>
-        </div>
-        <div class="col-lg-4 col-md-6">
-          <div class="feature-card p-4 rounded-4 h-100">
-            <div class="feature-icon mb-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-            </div>
-            <h3 class="h5 fw-semibold">Cloud Native</h3>
-            <p class="text-body-secondary mb-0">Built for modern cloud environments with support for Kubernetes, containers, and microservices architectures.</p>
-          </div>
-        </div>
-        <div class="col-lg-4 col-md-6">
-          <div class="feature-card p-4 rounded-4 h-100">
-            <div class="feature-icon mb-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
-            </div>
-            <h3 class="h5 fw-semibold">Evidence Collection</h3>
-            <p class="text-body-secondary mb-0">Automatically collect and organize compliance evidence with policy-driven observability toolkits.</p>
-          </div>
-        </div>
-        <div class="col-lg-4 col-md-6">
-          <div class="feature-card p-4 rounded-4 h-100">
-            <div class="feature-icon mb-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
-            </div>
-            <h3 class="h5 fw-semibold">OSCAL Native</h3>
-            <p class="text-body-secondary mb-0">Full support for NIST's Open Security Controls Assessment Language for standardized compliance data.</p>
-          </div>
-        </div>
-        <div class="col-lg-4 col-md-6">
-          <div class="feature-card p-4 rounded-4 h-100">
-            <div class="feature-icon mb-3">
-              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-            </div>
-            <h3 class="h5 fw-semibold">Open Source</h3>
-            <p class="text-body-secondary mb-0">Fully open source under Apache 2.0 license. Contribute, customize, and build with the community.</p>
-          </div>
-        </div>
+        {{- end }}
       </div>
     </div>
   </section>
@@ -111,7 +76,7 @@
         </div>
       </div>
       {{- $colors := dict "Go" "primary" "Python" "warning" "Shell" "secondary" "TypeScript" "info" -}}
-      {{- $projects := site.Data.projects | default slice -}}
+      {{- $projects := hugo.Data.projects | default slice -}}
       {{- if $projects }}
       {{- $projects = sort $projects "stars" "desc" -}}
       <div class="row g-4">
@@ -143,8 +108,8 @@
     <div class="container">
       <div class="row justify-content-center text-center">
         <div class="col-lg-8">
-          <h2 class="h2 fw-bold mb-3">Ready to Automate Your Compliance?</h2>
-          <p class="lead text-body-secondary mb-4">Join the community building the future of cloud native compliance.</p>
+          <h2 class="h2 fw-bold mb-3">Built for Compliance Engineers and Platform Teams</h2>
+          <p class="lead text-body-secondary mb-4">{{ (hugo.Data.positioning.audience).summary }}</p>
           <div class="d-flex justify-content-center gap-3 flex-wrap">
             <a class="btn btn-primary rounded-pill px-4" href="/docs/getting-started/" role="button">Get Started</a>
             <a class="btn btn-outline-secondary rounded-pill px-4" href="https://github.com/complytime/community" role="button" target="_blank" rel="noopener">Join Community</a>
@@ -161,7 +126,7 @@
   <div class="row justify-content-center text-center">
     <div class="col-lg-7">
       <h2 class="mt-2 fw-bold">Start building with ComplyTime today</h2>
-      <p class="text-body-secondary">Streamline your compliance workflows with our open source tools.</p>
+      <p class="text-body-secondary">Pull policies from OCI registries. Scan with multiple evaluators. Produce control-mapped evidence.</p>
       <a class="btn btn-primary rounded-pill px-4 my-2" href="/docs/getting-started/" role="button">Get Started</a>
     </div>
   </div>

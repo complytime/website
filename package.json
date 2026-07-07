@@ -9,6 +9,7 @@
     "url": "https://github.com/complytime/website.git"
   },
   "scripts": {
+    "postinstall": "patch-package --patch-dir patches && ls node_modules/sass-embedded-*/dart-sass/sass >/dev/null 2>&1 && ln -sf \"$(ls -d node_modules/sass-embedded-*/dart-sass/sass | head -1 | sed 's|node_modules/|../|')\" node_modules/.bin/dart-sass || true",
     "create": "hugo new",
     "dev": "hugo server --disableFastRender --noHTTPCache",
     "format": "prettier **/** -w -c",
@@ -26,11 +27,13 @@
   "devDependencies": {
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.0",
+    "patch-package": "^8.0.1",
     "playwright": "^1.61.1",
     "prettier": "^3.9.5",
+    "sass-embedded": "^1.100.0",
     "vite": "^8.1.4"
   },
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=22"
   }
 }

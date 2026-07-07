@@ -1,0 +1,112 @@
+problem:
+  summary: |-
+    **Compliance assessment at scale breaks down**
+
+      * Requirements lose meaning as they cross team boundaries.
+      * Verification logic is often locked to individual tools.
+      * Evidence lands in different formats across different systems.
+      * Fragmented evidence traceability back to requirements.
+  details:
+    - title: "Requirements lose fidelity"
+      text: >-
+        Authority documents (NIST 800-53, CIS Benchmarks, organizational policies)
+        must be translated into executable checks. When dozens of teams interpret the
+        same requirement independently, meaning and rationale are lost.
+      link: "https://github.com/complytime/complytime/blob/main/docs/problems/requirement-fidelity.md"
+    - title: "Evaluation is fragmented"
+      text: >-
+        Different technology stacks require different assessment tools -- OpenSCAP for
+        VMs, OPA for Kubernetes, platform-specific tooling for cloud. Each has its own
+        policy language and data model. Nothing ties them together.
+      link: "https://github.com/complytime/complytime/blob/main/docs/problems/evaluator-coupling.md"
+    - title: "Evidence is not traceable"
+      text: >-
+        Every assessment produces artifacts, but they land in different tools and formats.
+        Tracing a finding back to the authority document it satisfies is manual reconstruction.
+      link: "https://github.com/complytime/complytime/blob/main/docs/problems/evidence.md"
+
+solution:
+  summary: >-
+    ComplyTime is a compliance runtime. It pulls policies from OCI registries,
+    dispatches assessments to provider plugins, and produces structured evidence
+    mapped to the controls being assessed.
+  key_idea: >-
+    Compliance content (what must be true) and assessment logic (how to verify it)
+    have independent lifecycles. You can swap evaluators without rewriting content,
+    and update content without modifying evaluators.
+
+audience:
+  summary: >-
+    Platform engineers, compliance engineers, and DevSecOps teams who need
+    machine-readable, control-mapped compliance evidence -- whether for internal
+    audit, continuous monitoring, or regulatory frameworks like FedRAMP and FISMA.
+  use_cases:
+    - "Continuous compliance scanning in CI/CD pipelines"
+    - "Producing OSCAL assessment-results for GRC platforms or auditors"
+    - "Assessing systems against NIST 800-53, CIS Benchmarks, STIG, or HIPAA"
+    - "Consolidating scan results across multiple evaluators (OpenSCAP, OPA, AMPEL)"
+
+alternatives:
+  summary: >-
+    ComplyTime adds value when you need to assess against multiple frameworks,
+    use multiple evaluators, or produce structured evidence. If your needs are
+    simpler, a single tool may be enough.
+  items:
+    - condition: "Single framework, single evaluator"
+      recommendation: "Use OpenSCAP, Prowler, or Checkov directly."
+    - condition: "Kubernetes-only policy enforcement"
+      recommendation: "Use OPA Gatekeeper or Kyverno."
+    - condition: "One-time audit, not continuous"
+      recommendation: "A manual assessment with your existing tooling may suffice."
+
+maturity:
+  operational:
+    - "Runtime client (complyctl)"
+    - "Scanning providers: OpenSCAP, AMPEL, OPA"
+    - "OCI-based policy distribution (ComplyPacks)"
+    - "Output formats: EvaluationLog, OSCAL assessment-results, SARIF, Markdown"
+  experimental:
+    - "Evidence platform (structured evidence collection and querying)"
+    - "Cross-framework mapping (NIST 800-53 to CIS to PCI-DSS)"
+    - "Audit preparation tooling"
+
+frameworks:
+  - "NIST 800-53 Rev 5"
+  - "CIS Benchmarks"
+  - "STIG"
+  - "HIPAA"
+  - "OSPP"
+  - "Custom policies via OPA/Rego"
+
+features:
+  - title: "Evaluator Independence"
+    text: >-
+      Swap assessment tools without rewriting compliance content. OpenSCAP, OPA,
+      and AMPEL run as provider plugins behind a common interface.
+    icon: "sparkles"
+  - title: "Control-Mapped Evidence"
+    text: >-
+      Scan output maps findings to the specific controls being assessed. Produce
+      OSCAL assessment-results, SARIF, or Markdown reports.
+    icon: "shield-check"
+  - title: "OCI Distribution"
+    text: >-
+      Policies are packaged as OCI artifacts and distributed through standard
+      container registries. The same infrastructure that moves images moves
+      compliance content.
+    icon: "globe"
+  - title: "Multi-Framework Assessment"
+    text: >-
+      Assess against NIST 800-53, CIS Benchmarks, STIG, HIPAA, and custom
+      OPA policies from a single tool.
+    icon: "clipboard-check"
+  - title: "OSCAL Native"
+    text: >-
+      Built on NIST's Open Security Controls Assessment Language. Compliance
+      data is structured and machine-readable from the start.
+    icon: "file-arrow-down"
+  - title: "Open Source"
+    text: >-
+      Apache 2.0 licensed. The compliance content, assessment logic, and runtime
+      are all open source.
+    icon: "github"

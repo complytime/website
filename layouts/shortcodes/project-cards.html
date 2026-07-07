@@ -1,5 +1,5 @@
 {{- $colors := dict "Go" "primary" "Python" "warning" "Shell" "secondary" "TypeScript" "info" -}}
-{{- $projects := site.Data.projects | default slice -}}
+{{- $projects := hugo.Data.projects | default slice -}}
 {{- if $projects }}
 {{- $projects = sort $projects "stars" "desc" -}}
 {{- $types := slice -}}

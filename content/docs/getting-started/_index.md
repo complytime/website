@@ -1,7 +1,7 @@
 ---
 title: "Getting Started"
-description: "Get started with ComplyTime in minutes."
-lead: "Get up and running with ComplyTime compliance automation tools."
+description: "Learn what ComplyTime does, who it's for, and how to run your first compliance scan."
+lead: "Understand the problem, check whether ComplyTime fits your needs, then run your first scan."
 date: 2024-01-01T00:00:00+00:00
 lastmod: 2024-12-24T00:00:00+00:00
 draft: false
@@ -10,9 +10,21 @@ weight: 200
 toc: true
 ---
 
-## Introduction
+## What Problem Does ComplyTime Solve?
 
-ComplyTime is a suite of open source tools designed to automate compliance workflows in cloud native environments. Our engineering-first approach brings compliance into your existing DevSecOps pipeline.
+{{< positioning section="problem" >}}
+
+## Who Is This For?
+
+{{< positioning section="audience" >}}
+
+## When to Use Something Simpler
+
+{{< positioning section="alternatives" >}}
+
+## What's Operational Today
+
+{{< positioning section="maturity" >}}
 
 ## Architecture Overview
 
@@ -131,6 +143,8 @@ complyctl scan --policy-id <policy-id> --format sarif
 
 Output is written to `./.complytime/scan/`.
 
+**What does the scan produce?** Each scan generates a compliance report mapping findings to the specific controls assessed. An exit code of `0` means the scan completed successfully -- findings appear in the report, not as errors. The default EvaluationLog format merges results from all providers into a single assessment. OSCAL assessment-results can be fed directly to GRC platforms or auditors. SARIF integrates with code analysis tools. The Markdown format is human-readable and suitable for review.
+
 **6. Check workspace health (optional)**
 
 ```bash
@@ -141,4 +155,6 @@ complyctl providers
 ## Next Steps
 
 - Explore [all ComplyTime projects](/docs/projects/)
-
+- Read the [design vision](https://github.com/complytime/complytime/blob/main/docs/vision.md) for the problems ComplyTime addresses
+- Review the [architecture](https://github.com/complytime/complytime/blob/main/docs/architecture.md) and [glossary](https://github.com/complytime/complytime/blob/main/docs/glossary.md)
+- Browse the [problem deep-dives](https://github.com/complytime/complytime/tree/main/docs/problems) for requirement fidelity, evaluator coupling, and evidence
