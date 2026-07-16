@@ -28,7 +28,7 @@
     "@changesets/cli": "^2.31.0",
     "playwright": "^1.61.1",
     "prettier": "^3.9.5",
-    "vite": "^8.1.4"
+    "vite": "^8.1.5"
   },
   "engines": {
     "node": ">=20.11.0"
