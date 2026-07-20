@@ -1,10 +1,11 @@
 {
   "repos": {
-    "complyctl": "cb68b6fecd8e9c612b92b88c98a60ecd0f3b5ac1",
-    "complypack": "b56cd3f0ede0918d0a5299bf6e0bb0a7bfe86972",
+    "complyctl": "f1c151266595bf76857d9d25f6184218a0db841a",
+    "complypack": "193816712a0c06e41e66f411853a472e89763e13",
     "complyscribe": "8c204022b2e6ff56759c2d1b69aa62026b62d5ae",
-    "complytime": "291752003e0c78485bd016723a9868fff20f403c",
-    "complytime-collector-components": "786e00480a57d0178adae9273fa55ecaddbc93ed",
-    "complytime-providers": "3b1310b3e8396ec36e8d4ad5bf22b6ec23cf749e"
+    "complytime": "af3bbd2316efa5fe865c0785c0e698dcf9222629",
+    "complytime-collector-components": "5926ce1646aea9a47214848bb24ea154243a4775",
+    "complytime-providers": "8761f2f53b5b585f56865d33f89c0a192417bbbe",
+    "homebrew-tap": "6f19343f797890a48645a2c3a5f24715a8115895"
   }
 }
