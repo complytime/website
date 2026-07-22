@@ -8,7 +8,7 @@
 #   make sync-dry        — dry-run content sync (reads GitHub, writes nothing)
 #   make sync            — apply content sync to disk
 #   make dev             — start Hugo dev server (after syncing content)
-#   make check           — vet + fmt-check + race tests
+#   make check           — vet + fmt-check + race tests + doc coverage
 # ---------------------------------------------------------------------------
 
 # Overridable variables
@@ -22,6 +22,7 @@ REPO       ?=
 
 SYNC_BIN   := cmd/sync-content/sync-content
 SYNC_PKG   := ./cmd/sync-content/...
+DOCTEST_DIR ?= /tmp/doctest-snippets
 
 # Common flags passed to every sync invocation
 SYNC_FLAGS := --org $(ORG) --config $(CONFIG) --output $(OUTPUT) --workers $(WORKERS) --timeout $(TIMEOUT)
@@ -49,24 +50,26 @@ build: ## Compile the sync-content binary
 	go build -o $(SYNC_BIN) ./cmd/sync-content
 
 .PHONY: test
-test: ## Run all Go unit tests
-	go test $(SYNC_PKG)
+test: ## Run all tests (Go unit + doc tests + doc coverage)
+	go test $(SYNC_PKG) ./cmd/doctest/...
+	-$(MAKE) test-docs
+	-$(MAKE) test-docs-coverage
 
 .PHONY: test-race
 test-race: ## Run Go tests with the race detector
-	go test -race $(SYNC_PKG)
+	go test -race $(SYNC_PKG) ./cmd/doctest/...
 
 .PHONY: vet
 vet: ## Run go vet
-	go vet $(SYNC_PKG)
+	go vet $(SYNC_PKG) ./cmd/doctest/...
 
 .PHONY: fmt
 fmt: ## Format Go source files with gofmt
-	gofmt -w cmd/sync-content/
+	gofmt -w cmd/sync-content/ cmd/doctest/
 
 .PHONY: fmt-check
 fmt-check: ## Check Go formatting (non-destructive)
-	@out=$$(gofmt -l cmd/sync-content/); \
+	@out=$$(gofmt -l cmd/sync-content/ cmd/doctest/); \
 	if [ -n "$$out" ]; then \
 		echo "The following files need formatting:"; \
 		echo "$$out"; \
@@ -74,7 +77,8 @@ fmt-check: ## Check Go formatting (non-destructive)
 	fi
 
 .PHONY: check
-check: vet fmt-check test-race ## Run vet + fmt-check + race tests (CI equivalent)
+check: vet fmt-check test-race ## Run vet + fmt-check + race tests + doc coverage (CI equivalent)
+	-$(MAKE) test-docs-coverage
 
 # ---------------------------------------------------------------------------
 # Content sync — uses GITHUB_TOKEN from the environment
@@ -105,6 +109,22 @@ sync-single-dry: ## Dry-run sync for one repo  (REPO=complytime/complyctl)
 sync-single: ## Apply sync for one repo  (REPO=complytime/complyctl)
 	@if [ -z "$(REPO)" ]; then echo "Usage: make sync-single REPO=complytime/<name>"; exit 1; fi
 	$(MAKE) sync REPO=$(REPO)
+
+# ---------------------------------------------------------------------------
+# Documentation tests — extract, validate, and test code blocks
+# ---------------------------------------------------------------------------
+
+.PHONY: test-docs-extract
+test-docs-extract: ## Extract testable code blocks from documentation
+	@go run ./cmd/doctest extract --content-dir content/docs --output-dir $(DOCTEST_DIR)
+
+.PHONY: test-docs
+test-docs: test-docs-extract ## Run documentation tests (Bats)
+	@SNIPPETS_DIR=$(DOCTEST_DIR) node_modules/.bin/bats --formatter pretty tests/docs/
+
+.PHONY: test-docs-coverage
+test-docs-coverage: ## Report untested code blocks in documentation
+	@go run ./cmd/doctest coverage --content-dir content/docs
 
 # ---------------------------------------------------------------------------
 # Hugo / Node — site build and dev server

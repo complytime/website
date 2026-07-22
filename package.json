@@ -26,6 +26,9 @@
   "devDependencies": {
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.0",
+    "bats": "^1.13.0",
+    "bats-assert": "^2.2.4",
+    "bats-support": "^0.3.0",
     "playwright": "^1.61.1",
     "prettier": "^3.9.5",
     "vite": "^8.1.4"
