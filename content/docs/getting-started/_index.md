@@ -28,12 +28,13 @@ ComplyTime spans two core domains **Definition** and **Measurement** integrated 
 
 Before you begin, ensure you have:
 
-- **Git** for cloning repositories
+- **[Git](https://git-scm.com/)** for cloning repositories
+- **[Sigstore Cosign](https://github.com/sigstore/cosign)** for OCI registry object validation
 
 To build from source, you will also need:
 
-- **Go 1.24+**
-- **Make**
+- **[Go](https://go.dev/) 1.24+**
+- **[Make](https://www.gnu.org/software/make/)**
 
 ## Quick Start with complyctl
 
