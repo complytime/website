@@ -72,6 +72,10 @@ complyctl version
 
 ### Install a Scanning Provider
 
+> **Note:** ComplyTime uses two separate `.complytime` directories with different scopes:
+> `~/.complytime/` (under your home directory) is a **global** cache for providers and downloaded policies,
+> while `./.complytime/` (in your current working directory) holds **per-workspace** state such as `complytime.yaml` and scan output.
+
 Scanning providers are standalone executables placed in `~/.complytime/providers/`. The filename determines the evaluator ID (e.g. `complyctl-provider-openscap`).
 
 ```bash
