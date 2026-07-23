@@ -31,22 +31,32 @@ For each eligible repo it:
 3. Normalises casing: ALL CAPS filenames (e.g. `CONTRIBUTING.md`) and headings become Title Case (`Contributing`); known acronyms (API, OSCAL, CLI, …) are preserved.
 4. Shifts all Markdown headings down one level (H1→H2, H2→H3, …) so Hugo's page title is the sole H1.
 5. Strips CI badge lines from the top of the README.
-6. Rewrites relative Markdown links and images to absolute GitHub URLs.
-7. Scans for doc pages under configurable `scan_paths` (e.g. `docs/`).
-8. Builds a `ProjectCard` for the landing page.
+6. Rewrites diagram code blocks (mermaid, plantuml, d2, etc.) to Kroki format for server-side rendering.
+7. Rewrites relative Markdown links and images to absolute GitHub URLs.
+8. Scans for doc pages under configurable `scan_paths` (e.g. `docs/`).
+9. Builds a `ProjectCard` for the landing page.
 
 After processing all repos, the tool writes `data/projects.json` — an array of
 `ProjectCard` objects that Hugo templates use to render the "Our Projects" section.
 
 ### Phase 2: Config Sync (opt-in)
 
-Reads `sync-config.yaml` and pulls specific files with per-file transforms:
+Reads `sync-config.yaml` and pulls specific files with per-file transforms.
 
-- **Frontmatter injection** — prepend YAML frontmatter with arbitrary key-value
-  pairs, or replace existing frontmatter.
-- **Link rewriting** — convert relative Markdown links to absolute GitHub blob
-  URLs and relative images to raw.githubusercontent URLs.
-- **Badge stripping** — remove CI/status badge lines from the top of content.
+Three transforms are **always applied** to every config-synced file, regardless
+of transform flags: `stripLeadingH1`, `shiftHeadings`, and `titleCaseHeadings`.
+These ensure consistent heading structure across all synced content.
+
+The following transforms are opt-in per file:
+
+- **Badge stripping** (`strip_badges`) — remove CI/status badge lines from the
+  top of content (applied before the always-on transforms).
+- **Link rewriting** (`rewrite_links`) — convert relative Markdown links to
+  absolute GitHub blob URLs and relative images to raw.githubusercontent URLs.
+- **Diagram rewriting** (`rewrite_diagrams`) — convert fenced diagram code
+  blocks to Kroki format for server-side rendering.
+- **Frontmatter injection** (`inject_frontmatter`) — prepend YAML frontmatter
+  with arbitrary key-value pairs, or replace existing frontmatter.
 
 Config sources can operate alongside or instead of the org scan per-repo:
 
@@ -79,6 +89,24 @@ go run ./cmd/sync-content --org complytime --config sync-config.yaml --write   #
 go run ./cmd/sync-content --repo complytime/complyctl --config sync-config.yaml --write  # single repo
 go test -race ./cmd/sync-content/...                                           # run tests
 ```
+
+## CLI Reference
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--org` | `complytime` | GitHub organization name |
+| `--token` | `""` | GitHub API token (falls back to `GITHUB_TOKEN` env var) |
+| `--output` | `.` | Hugo site root directory |
+| `--config` | `""` | Path to `sync-config.yaml` for declarative file syncs |
+| `--repo` | `""` | Sync only this repo (e.g. `complytime/complyctl`); must be in peribolos |
+| `--write` | `false` | Apply changes to disk (default: dry-run) |
+| `--workers` | `5` | Maximum concurrent repo processing goroutines |
+| `--timeout` | `3m` | Overall timeout for all API operations |
+| `--lock` | `""` | Path to `.content-lock.json` for content approval gating |
+| `--update-lock` | `false` | Write updated upstream SHAs to the lockfile (requires `--lock`) |
+| `--summary` | `""` | Write Markdown change summary to this file (for PR body generation) |
+| `--include` | `""` | Comma-separated repo allowlist (empty = auto-discover all) |
+| `--exclude` | `""` | Comma-separated repo names to skip (merged with `discovery.ignore_repos`) |
 
 ## Configuration
 
@@ -134,6 +162,7 @@ sources:
             description: "A compliance CLI tool."
             weight: 10
           rewrite_links: true
+          rewrite_diagrams: true
           strip_badges: true
 
       - src: docs/QUICK_START.md
@@ -144,6 +173,7 @@ sources:
             description: "Getting started with complyctl."
             weight: 20
           rewrite_links: true
+          rewrite_diagrams: true
 ```
 
 Each `files` entry maps one upstream file (`src`) to one local destination
@@ -218,14 +248,17 @@ handles repos being renamed or removed from peribolos.
 and compares bytes. If identical, the write is skipped entirely. This means
 running the tool twice in succession produces zero disk I/O on the second run.
 
-**Provenance comments.** Every synced file includes an HTML comment after the
-frontmatter:
+**Provenance comments.** Config-declared files and auto-discovered doc pages
+include an HTML comment after the frontmatter:
 
 ```
 <!-- synced from complytime/complyctl/README.md@main (abc123def456) -->
 ```
 
-This makes it trivial to trace any page back to its upstream source and commit.
+This makes it trivial to trace synced pages back to their upstream source and
+commit. Governance-generated pages (`_index.md` and `overview.md`) do not
+include provenance comments — their `source_sha` and `readme_sha` frontmatter
+fields serve the same purpose.
 
 **Bounded concurrency with rate-limit awareness.** A worker pool (default 5,
 configurable via `--workers`) processes repos concurrently. The API client retries
@@ -263,7 +296,7 @@ matching:
 | Keywords | Type |
 |----------|------|
 | `cli` topic, "command-line" or " cli" in description | CLI Tool |
-| `automation` topic, "automat" in description | Automation |
+| `automation` topic, "automation" or "automat" in description | Automation |
 | `observability` topic, "observability" or "collector" in description | Observability |
 | `framework` topic, "framework" or "bridging" in description | Framework |
 | _(default)_ | Library |
@@ -332,8 +365,51 @@ params:
 | `titleCaseHeadings` | Applies acronym-aware Title Case to all in-page heading text (e.g. `## getting started` → `## Getting Started`, `## api reference` → `## API Reference`, `## CONTRIBUTING` → `## Contributing`); normalises ALL CAPS words while preserving known acronyms; ensures page headings and Hugo's TableOfContents match |
 | `stripBadges` | Removes `[![alt](img)](link)` badge patterns from the start of content |
 | `rewriteRelativeLinks` | Converts `[text](path)` to `[text](https://github.com/.../blob/main/path)` and `![alt](img)` to `![alt](https://raw.githubusercontent.com/.../img)` |
-| `rewriteDiagramBlocks` | Converts fenced diagram code blocks (mermaid, plantuml, d2, graphviz/dot, ditaa, and 12 other Kroki-supported languages) to `` ```kroki {type=…} `` format for server-side rendering; `dot` normalised to `graphviz` |
+| `rewriteDiagramBlocks` | Converts fenced diagram code blocks (mermaid, plantuml, d2, graphviz/dot, ditaa, and 13 other Kroki-supported languages) to `` ```kroki {type=…} `` format for server-side rendering; `dot` normalised to `graphviz` |
 | `injectFrontmatter` | Prepends or replaces YAML frontmatter with declared key-value pairs |
+
+## Operational Details
+
+### Safety Guards
+
+- **Zero-eligible-repo protection.** If the API returns zero eligible repos but
+  previous state exists (suggesting an API outage or misconfiguration), the tool
+  refuses to run cleanup and exits with an error. This prevents accidental
+  deletion of all content.
+- **Path traversal protection.** Every file write is validated by `isUnderDir`
+  to ensure the destination is within the output directory. Paths that escape
+  the site root are blocked and logged as errors.
+- **Config source governance.** Config-declared repos (`sources` entries) must
+  exist in the governance registry (`peribolos.yaml`). Repos not in the registry
+  are rejected with an error. The `--repo` flag is similarly validated.
+
+### HTTP Client Behaviour
+
+- **Per-request timeout:** 30 seconds per API call (separate from `--timeout`).
+- **Response body limit:** 10 MB safety ceiling on API responses.
+- **Rate limiting:** Retries up to 3 times on HTTP 403 (when `X-RateLimit-Remaining`
+  is 0) and 429, with exponential backoff respecting `Retry-After` and
+  `X-RateLimit-Reset` headers. Reset times more than 5 minutes in the future
+  fall back to exponential backoff.
+
+### Content Processing
+
+- **`index.md` files are skipped** during `scan_paths` discovery. Hugo treats
+  `index.md` as a leaf bundle, which conflicts with the `_index.md` branch
+  bundle the sync tool generates for every project directory.
+- **Intermediate section pages.** When discovered doc files live in nested
+  subdirectories under `content/docs/projects/{repo}/`, the tool auto-generates
+  `_index.md` section pages for each intermediate directory so Hugo's sidebar
+  renders the hierarchy correctly. Content outside `content/docs/projects/`
+  (e.g. `getting-started/`, `privacy.md`) is hand-authored and committed
+  normally — the sync tool never writes outside the projects tree.
+- **Empty language fallback.** When GitHub reports no language for a repo, the
+  `language` field in frontmatter and `ProjectCard` is set to `"Unknown"`.
+- **Max directory scan depth.** Recursive `scan_paths` listing is bounded to 10
+  levels to limit API calls on deeply nested repositories.
+- **Manifest carry-forward.** When a repo is unchanged (fast-path skip), its
+  entries from the previous manifest are preserved so orphan cleanup does not
+  remove files that were simply not re-fetched.
 
 ## CI/CD Integration
 
@@ -341,9 +417,19 @@ The tool integrates with three GitHub Actions workflows. See
 [CONTRIBUTING.md](../../CONTRIBUTING.md#cicd-and-deployment) for workflow details.
 
 **Structured outputs** — when running in GitHub Actions, the tool writes to
-`$GITHUB_OUTPUT` (`has_changes`, `changed_count`, `error_count`) and
-`$GITHUB_STEP_SUMMARY` (Markdown sync report). The `--summary` flag writes the
-same report to a file for PR body generation.
+`$GITHUB_OUTPUT` and `$GITHUB_STEP_SUMMARY` (Markdown sync report). The
+`--summary` flag writes the same report to a file for PR body generation.
+
+`GITHUB_OUTPUT` variables:
+
+| Variable | Description |
+|----------|-------------|
+| `has_changes` | `true` if any repos were added, updated, or removed |
+| `changed_count` | Number of repos added or updated |
+| `changed_repos` | Comma-separated list of changed repo names |
+| `changed_files_count` | Total number of individual files that changed |
+| `files_processed` | Total number of files processed across all repos |
+| `error_count` | Number of errors encountered during sync |
 
 **Exit codes**: `0` = success, `1` = one or more errors (API failures, write errors).
 
