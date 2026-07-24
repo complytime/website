@@ -1,0 +1,10 @@
+{
+ "compilerOptions": {
+  "paths": {
+   "*": [
+    "*",
+    "../node_modules/@thulite/doks-core/assets/*"
+   ]
+  }
+ }
+}
