@@ -116,7 +116,7 @@ website/
 │   ├── cleanup.go                   #   Orphan and stale content removal
 │   ├── path.go                      #   Path validation utilities
 │   ├── lock.go                      #   Content lockfile read/write/query
-│   └── *_test.go                    #   Tests mirror source files (10 files, ~2300 lines)
+│   └── *_test.go                    #   Tests (10 files, incl. helpers_test.go for shared test utilities)
 │
 ├── config/_default/                 # Hugo configuration (TOML)
 │   ├── hugo.toml                    #   Core Hugo settings
