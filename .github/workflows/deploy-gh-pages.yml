@@ -47,6 +47,9 @@ jobs:
       - name: Run checks
         run: make check
 
+      - name: Run tests
+        run: go test -race ./cmd/sync-content/... ./cmd/doctest/...
+
       - name: Sync content
         run: go run ./cmd/sync-content --org complytime --config sync-config.yaml --lock .content-lock.json --write
         env:
@@ -54,6 +57,9 @@ jobs:
 
       - name: Build
         run: hugo --minify --gc
+
+      - name: Run documentation tests (informational)
+        run: make test-docs || true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
