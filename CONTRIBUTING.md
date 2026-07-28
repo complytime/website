@@ -401,6 +401,7 @@ style: fix indentation in home template
 - [ ] No broken links or missing images
 - [ ] Frontmatter includes all required fields (`title`, `description`, `weight`)
 - [ ] If Go code was changed: `make check` passes (`go vet`, `gofmt`, and `go test -race`)
+- [ ] If documentation code blocks were changed: `make test-docs` passes
 - [ ] Commit messages follow conventional format
 - [ ] DCO sign-off is present
 
@@ -447,7 +448,7 @@ The Makefile provides handy targets for all common sync and Go operations
 make sync-dry        # dry-run — reads GitHub, writes nothing
 make sync            # apply changes to disk
 make sync-single REPO=complytime/complyctl  # single-repo dry-run
-make check           # go vet + fmt-check + race tests (CI equivalent)
+make check           # go vet + fmt-check + race tests + doc coverage (CI equivalent)
 make test-race       # tests with race detector only
 ```
 
@@ -482,6 +483,51 @@ export GITHUB_TOKEN="$(gh auth token)"
 echo "Token set, length: ${#GITHUB_TOKEN}, prefix: ${GITHUB_TOKEN:0:4}"
 go run ./cmd/sync-content --org complytime --config sync-config.yaml --write
 ```
+
+### Testing Documentation
+
+Documentation pages with shell commands use **testable code blocks** — fenced
+code blocks annotated with a `{test="..."}` attribute that links them to
+automated tests.
+
+**Annotating a code block:**
+
+````markdown
+```bash {test="install-complyctl"}
+go install github.com/complytime/complyctl@latest
+```
+````
+
+The `test` value must be lowercase alphanumeric with hyphens (`[a-z0-9-]+`).
+It becomes both the extracted snippet filename and the Bats test reference.
+Each value must be unique within a page.
+
+**Writing the corresponding test:**
+
+Create or update a `.bats` file in `tests/docs/` matching the page name:
+
+```bash
+# tests/docs/getting-started.bats
+
+@test "install-complyctl" {
+    run_snippet "getting-started/01-install-complyctl.bash"
+    assert_success
+}
+```
+
+**Opting out a page:** Add `testable_docs: false` to the page's YAML frontmatter
+to skip it entirely from extraction and coverage reporting.
+
+**Make targets:**
+
+| Target | What it does |
+|--------|-------------|
+| `make test-docs-extract` | Extract annotated code blocks to `/tmp/doctest-snippets` |
+| `make test-docs` | Extract + run Bats tests |
+| `make test-docs-coverage` | Report untested executable code blocks (warnings only) |
+
+Coverage warnings are non-blocking — they show which blocks could benefit from
+test annotations but do not fail the build.
 
 ### Testing Tips
 
