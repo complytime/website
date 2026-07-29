@@ -1,0 +1,14 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks#configuration
+#
+# This file extends MegaLinter's built-in gitleaks rules with
+# project-specific allowlists for known false positives.
+
+[allowlist]
+# .content-lock.json maps repository names to commit SHAs.
+# The "complyapi" key triggers the generic-api-key rule because
+# the key contains "api" and the value is a 40-char hex string.
+# These are git commit hashes, not secrets.
+paths = [
+  '''.content-lock.json''',
+]
