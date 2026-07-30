@@ -11,7 +11,7 @@ toc: true
 cascade:
   - sidebar:
       collapsed: true
-    _target:
+    target:
       kind: section
       path: "{/docs/projects/*}"
 ---
