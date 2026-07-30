@@ -55,13 +55,17 @@ oriented quickly.
 
 ## Prerequisites
 
-| Tool       | Version   | Notes                                     |
-|------------|-----------|-------------------------------------------|
-| **Node.js** | ≥ 22      | Required by Hugo/Doks pipeline            |
-| **npm**    | (bundled) | Comes with Node.js                        |
-| **Hugo**   | ≥ 0.155.1 | Extended edition; installed via npm scripts |
-| **Go**     | ≥ 1.25    | Required for the content sync tool        |
-| **Git**    | Any recent | For cloning and version control            |
+| Tool       | Notes                                     |
+|------------|-------------------------------------------|
+| **Node.js** | Required by Hugo/Doks pipeline            |
+| **npm**    | Comes with Node.js                        |
+| **Hugo**   | Extended edition; installed via npm scripts |
+| **Go**     | Required for the content sync tool        |
+| **Git**    | For cloning and version control            |
+
+Exact version requirements are enforced at runtime by `make dev` (and every
+other Make target). If a tool is missing or too old, Make tells you what to
+install and which version is needed.
 
 > **Tip:** If you only want to edit Markdown content, Node.js + npm is all you
 > need. Go is only required if you need to run the sync tool or its tests.
@@ -135,13 +139,18 @@ website/
 │           └── {repo}/              #   Generated per-repo content (gitignored)
 │
 ├── data/
+│   ├── positioning.yaml             #   Hand-maintained positioning content (committed)
 │   └── projects.json                #   Generated landing page cards (gitignored)
 │
-├── layouts/                         # Custom Hugo layout overrides
+├── layouts/                         # Custom Hugo layout overrides (see table below)
+│   ├── baseof.html                  #   Base HTML shell override
 │   ├── home.html                    #   Homepage template (hero + features)
+│   ├── versions.html                #   Version-picker page
 │   ├── docs/list.html               #   Docs section listing template
-│   └── _default/_markup/
-│       └── render-image.html        #   Custom image render hook
+│   ├── shortcodes/                  #   Custom shortcodes
+│   ├── _partials/                   #   Partial overrides (SEO, header, head, footer)
+│   ├── _default/_markup/            #   Render hook overrides
+│   └── _markup/                     #   Additional render hooks
 │
 ├── sync-config.yaml                 #   Declarative file sync manifest
 ├── .content-lock.json               #   Approved upstream SHAs per repo (committed)
@@ -303,10 +312,22 @@ into the same relative path under `layouts/` and modify it.
 
 | File | What It Overrides | Why |
 |------|-------------------|-----|
-| `layouts/home.html` | Doks default homepage | Custom hero, features, and project cards |
-| `layouts/docs/list.html` | Doks docs list | Custom section listing layout |
-| `layouts/_default/_markup/render-image.html` | `@thulite/images` render hook | Fixes broken remote SVG/badge images |
-| `layouts/_partials/footer/script-footer-custom.html` | (empty hook) | Available for custom footer scripts |
+| `baseof.html` | Theme base HTML shell | Scroll-spy, configurable container breakpoint, to-top button |
+| `home.html` | Doks default homepage | Custom hero, features, and project cards |
+| `versions.html` | (custom layout) | Version-picker page from `docs-versions` data |
+| `docs/list.html` | Doks docs list | Custom section listing layout |
+| `shortcodes/positioning.html` | (custom shortcode) | Renders positioning data from `data/positioning.yaml` |
+| `shortcodes/project-cards.html` | (custom shortcode) | Language-badged project cards from `data/projects.json` |
+| `shortcodes/theme-image.html` | (custom shortcode) | Light/dark image swap via CSS class |
+| `_partials/seo/opengraph.html` | Theme OpenGraph partial | Full OpenGraph meta tags with article metadata |
+| `_partials/seo/favicons.html` | Theme favicon partial | Multi-size favicons and webmanifest from source PNG |
+| `_partials/header/header.html` | Theme header partial | ComplyTime logo and version dropdown |
+| `_partials/head/stylesheet.html` | Theme stylesheet partial | Dart Sass deprecation suppression |
+| `_partials/main/edit-page.html` | Theme edit-page partial | Per-page `editURL` front-matter support |
+| `_partials/footer/script-footer-custom.html` | (empty hook) | Available for custom footer scripts |
+| `_default/_markup/render-image.html` | `@thulite/images` render hook | Fixes broken remote SVG/badge images |
+| `_default/_markup/render-heading.html` | Theme heading render hook | Clickable `#` anchor links on headings |
+| `_markup/render-codeblock-kroki.html` | Theme Kroki code-block hook | Fixes upstream `output_format` casing and error severity |
 
 ### The Module Mount System
 

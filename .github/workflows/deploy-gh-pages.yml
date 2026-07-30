@@ -44,20 +44,8 @@ jobs:
           npm ci
           echo "${{ github.workspace }}/node_modules/.bin" >> "$GITHUB_PATH"
 
-      - name: Go vet
-        run: go vet ./...
-
-      - name: Check formatting
-        run: |
-          unformatted=$(gofmt -l ./cmd/sync-content/)
-          if [ -n "$unformatted" ]; then
-            echo "::error::Unformatted Go files:"
-            echo "$unformatted"
-            exit 1
-          fi
-
-      - name: Run tests
-        run: go test -race ./cmd/sync-content/...
+      - name: Run checks
+        run: make check
 
       - name: Sync content
         run: go run ./cmd/sync-content --org complytime --config sync-config.yaml --lock .content-lock.json --write
