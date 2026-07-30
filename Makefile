@@ -20,8 +20,9 @@ WORKERS    ?= 5
 TIMEOUT    ?= 3m
 REPO       ?=
 
-SYNC_BIN   := cmd/sync-content/sync-content
-SYNC_PKG   := ./cmd/sync-content/...
+SYNC_BIN    := cmd/sync-content/sync-content
+SYNC_PKG    := ./cmd/sync-content/...
+HUGO_CACHEDIR ?= /tmp/hugo_cache_complytime
 
 # Common flags passed to every sync invocation
 SYNC_FLAGS := --org $(ORG) --config $(CONFIG) --output $(OUTPUT) --workers $(WORKERS) --timeout $(TIMEOUT)
@@ -220,7 +221,7 @@ clean-build: _check-node-version _check-hugo-version ## Remove Hugo output + res
 
 .PHONY: clean-nuclear
 clean-nuclear: _check-node-version _check-hugo-version ## Full wipe (Hugo output, Hugo cache, node_modules) + fresh npm ci + rebuild
-	rm -rf public/ resources/ /tmp/hugo_cache/ node_modules/
+	rm -rf public/ resources/ $(HUGO_CACHEDIR) node_modules/
 	npm ci
 	npm run build
 

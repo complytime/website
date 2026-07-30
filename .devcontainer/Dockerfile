@@ -4,10 +4,14 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04@sha256:d94c97dd9cacf183d0
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
-    nodejs \
-    npm \
     wget && \
     update-ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+ARG NODE_MAJOR=22
+# hadolint ignore=DL3008,DL4006
+RUN wget -qO- "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
 ARG HUGO_VERSION="0.164.0"

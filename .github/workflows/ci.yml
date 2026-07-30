@@ -38,8 +38,8 @@ jobs:
           npm ci
           echo "${{ github.workspace }}/node_modules/.bin" >> "$GITHUB_PATH"
 
-      - name: Run tests
-        run: go test -race ./cmd/sync-content/...
+      - name: Run checks
+        run: make check
 
       - name: Sync content
         run: go run ./cmd/sync-content --org complytime --config sync-config.yaml --lock .content-lock.json --write

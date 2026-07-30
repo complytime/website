@@ -70,14 +70,6 @@ maturity:
     - "Cross-framework mapping (NIST 800-53 to CIS to PCI-DSS)"
     - "Audit preparation tooling"
 
-frameworks:
-  - "NIST 800-53 Rev 5"
-  - "CIS Benchmarks"
-  - "STIG"
-  - "HIPAA"
-  - "OSPP"
-  - "Custom policies via OPA/Rego"
-
 features:
   - title: "Evaluator Independence"
     text: >-
