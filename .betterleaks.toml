@@ -1,12 +1,12 @@
 # Betterleaks configuration
 # https://github.com/betterleaks/betterleaks
 #
-# .content-lock.json maps repository names to commit SHAs.
-# The "complyapi" key triggers generic-api-key because the key
-# contains "api" and the value is a 40-char hex string.
-# These are git commit hashes, not secrets.
+# Prefilter skips paths before regex matching:
+# - node_modules/: vendored dependencies, not project secrets
+# - .content-lock.json: maps repo names to commit SHAs; the "complyapi"
+#   key triggers generic-api-key (key contains "api" + 40-char hex value)
 prefilter = '''
-matchesAny(get(attributes, "path", ""), [`.content-lock.json`])
+matchesAny(get(attributes, "path", ""), [`node_modules/`, `.content-lock.json`])
 '''
 
 [extend]
