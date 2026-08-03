@@ -41,6 +41,16 @@ a:not(.btn):not(.nav-link):not(.text-decoration-none) {
       margin-bottom: 1rem;
     }
   }
+
+  .summary-list {
+    ul {
+      display: inline-block;
+      text-align: left;
+      list-style-position: inside;
+      padding-left: 1.5em;
+      min-width: 75%;
+    }
+  }
 }
 
 // Code improvements

@@ -1,0 +1,26 @@
+diff --git a/node_modules/@thulite/doks-core/assets/scss/components/_forms.scss b/node_modules/@thulite/doks-core/assets/scss/components/_forms.scss
+index f589bc2..58bd1b1 100644
+--- a/node_modules/@thulite/doks-core/assets/scss/components/_forms.scss
++++ b/node_modules/@thulite/doks-core/assets/scss/components/_forms.scss
+@@ -4,7 +4,7 @@
+ }
+ 
+ .search-form label {
+-    @extend .form-group;
++    @extend .form-group !optional;
+ 
+     font-weight: normal;
+ }
+diff --git a/node_modules/@thulite/doks-core/layouts/versions.html b/node_modules/@thulite/doks-core/layouts/versions.html
+index 6124db5..5472db4 100644
+--- a/node_modules/@thulite/doks-core/layouts/versions.html
++++ b/node_modules/@thulite/doks-core/layouts/versions.html
+@@ -4,7 +4,7 @@
+     <p class="lead">{{ .Params.lead | safeHTML }}</p>
+     {{ .Content }}
+     <div class="row">
+-      {{ range $release := sort (index $.Site.Data "docs-versions") "group" "desc" -}}
++      {{ range $release := sort (index hugo.Data "docs-versions") "group" "desc" -}}
+       <div class="col-md-8 col-lg-4 col-xl mb-4">
+         <h2>{{ $release.group }}</h2>
+         <p>{{ $release.description }}</p>
