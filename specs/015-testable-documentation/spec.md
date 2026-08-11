@@ -19,7 +19,7 @@ This feature adds testable documentation infrastructure: authors annotate fenced
 ### In Scope
 
 | ID | Capability |
-|----|-----------|
+| ---- | ----------- |
 | IS-001 | Markdown authoring convention: `{test="<identifier>"}` attribute on fenced code blocks in the info string |
 | IS-002 | Go extraction tool (`cmd/doctest/`) with `extract` and `coverage` subcommands |
 | IS-003 | Goldmark-based AST parsing of fenced code blocks with `parser.ParseAttributes()` for info-string attribute extraction |
@@ -28,7 +28,7 @@ This feature adds testable documentation infrastructure: authors annotate fenced
 | IS-006 | `manifest.json` per page mapping test names to source `file:line` for traceability |
 | IS-007 | Coverage reporting: list untested executable-language blocks with file, line, and language |
 | IS-008 | Duplicate `test` value detection within a page (extractor errors on duplicates) |
-| IS-009 | Bats test harness with git submodules for bats-core, bats-support, bats-assert |
+| IS-009 | Bats test harness with bats-core, bats-support, bats-assert (npm devDependencies) |
 | IS-010 | Helper pattern for language-specific snippet execution (`tests/docs/helpers/bash.bash`) |
 | IS-011 | Makefile targets: `test-docs-extract`, `test-docs`, `test-docs-coverage` |
 | IS-012 | CI integration: `make test-docs` step in `ci.yml` and `deploy-gh-pages.yml` |
@@ -41,13 +41,13 @@ This feature adds testable documentation infrastructure: authors annotate fenced
 - Testing synced/generated content (`content/docs/projects/*/`) — future goal
 - Auto-generating Bats test files from extracted snippets
 - Block-level opt-out attribute (e.g., `{skip=true}`) — use non-executable language instead
-- Strict coverage enforcement in CI (Phase 2, one-line change when ready)
+- Strict coverage enforcement in CI (Phase 2 — remove `-` prefix and `continue-on-error: true` when ready)
 - Non-shell language test execution (Go, Python helpers are future additions)
 
 ### Edge Cases
 
 | Case | Expected Behavior |
-|------|-------------------|
+| ------ | ------------------- |
 | Code block with no info string | Silently skipped — no language, not testable |
 | Code block with language but no `{...}` | Flagged in coverage report if language is testable; silently skipped if non-testable |
 | Code block with `{test="..."}` but non-testable language | Extracted and written to output dir (enables future expansion); not flagged in coverage |
@@ -79,10 +79,13 @@ go install github.com/complytime/complyctl@latest
 
 **Language classification:**
 
+<!-- markdownlint-disable MD060 -->
 | Category | Languages |
 |----------|-----------|
 | Testable (flagged if untested) | `bash`, `sh`, `shell`, `zsh` |
 | Non-testable (silently skipped) | `text`, `plaintext`, `console`, `yaml`, `toml`, `json`, `xml`, `csv`, `markdown`, `go`, `python`, and any language without a helper |
+<!-- markdownlint-enable MD060 -->
+
 
 **Ordering:** Blocks within a page are extracted in document order with a numeric prefix (`01-install-complyctl.bash`, `02-run-scan.bash`) to preserve sequencing for tests that build on prior state.
 
@@ -96,7 +99,7 @@ go install github.com/complytime/complyctl@latest
 
 ### CLI Interface
 
-```
+```text
 doctest extract --content-dir <path> --output-dir <path>
 doctest coverage --content-dir <path>
 ```
@@ -112,7 +115,7 @@ doctest coverage --content-dir <path>
 **`coverage` subcommand:**
 - Same file walk and parse as `extract`.
 - Reports untested executable-language blocks: one line per block with file path, line number, and language.
-- Exit 0 always (warnings only). Future `--strict` flag exits 1 when untested blocks exist.
+- Exit 1 when untested executable-language blocks exist. Exit 0 when all blocks are covered.
 
 ### Implementation Details
 
@@ -124,7 +127,7 @@ doctest coverage --content-dir <path>
 
 ### Output Structure
 
-```
+```text
 <output-dir>/
 └── getting-started/
     ├── 01-install-complyctl.bash
@@ -152,7 +155,7 @@ doctest coverage --content-dir <path>
 Unit tests following the existing `cmd/sync-content/` pattern — table-driven tests with temp dirs. Coverage:
 
 | Test | What it verifies |
-|------|-----------------|
+| ------ | ----------------- |
 | `TestExtractBasic` | Single annotated block extracted with correct filename and content |
 | `TestExtractOrdering` | Multiple blocks get sequential numeric prefixes in document order |
 | `TestExtractDuplicateError` | Duplicate `test` values within a page produce an error |
@@ -169,20 +172,19 @@ Unit tests following the existing `cmd/sync-content/` pattern — table-driven t
 
 ### Installation
 
-Bats-core, bats-support, and bats-assert installed as git submodules in `tests/libs/`:
+Bats-core, bats-support, and bats-assert installed as npm devDependencies:
 
-```
-tests/libs/
-├── bats-core/       # github.com/bats-core/bats-core
-├── bats-support/    # github.com/bats-core/bats-support
-└── bats-assert/     # github.com/bats-core/bats-assert
+```json
+"bats": "^1.13.0",
+"bats-support": "^0.3.0",
+"bats-assert": "^2.2.4"
 ```
 
-This is the standard Bats distribution pattern — no npm/brew dependency, works identically in CI and local development.
+This leverages the project's existing npm/Node.js toolchain — `npm install` is already a prerequisite for Hugo/Thulite development.
 
 ### Directory Layout
 
-```
+```text
 tests/docs/
 ├── setup_suite.bash        # shared setup: set SNIPPETS_DIR, load libraries
 ├── helpers/
@@ -193,7 +195,7 @@ tests/docs/
 ### `setup_suite.bash`
 
 ```bash
-export SNIPPETS_DIR="${SNIPPETS_DIR:-/tmp/doctest-snippets}"
+export SNIPPETS_DIR="${SNIPPETS_DIR:-.test-output/doctest-snippets}"
 ```
 
 Suite-level setup sets the snippets directory. Library loading happens per-file in `setup()` — this is the standard Bats pattern where each `.bats` file declares its own dependencies.
@@ -204,7 +206,7 @@ Suite-level setup sets the snippets directory. Library loading happens per-file 
 run_snippet() {
     local snippet="$SNIPPETS_DIR/$1"
     [[ -f "$snippet" ]] || { echo "Snippet not found: $snippet" >&2; return 1; }
-    run bash "$snippet"
+    run bash -- "$snippet"
 }
 ```
 
@@ -215,8 +217,8 @@ run_snippet() {
 
 setup() {
     load 'helpers/bash'
-    load '../libs/bats-support/load'
-    load '../libs/bats-assert/load'
+    load '../../node_modules/bats-support/load'
+    load '../../node_modules/bats-assert/load'
 }
 
 @test "install-complyctl" {
@@ -241,6 +243,7 @@ setup() {
 
 New section after existing "Content sync" section:
 
+<!-- markdownlint-disable MD010 -->
 ```makefile
 # ---------------------------------------------------------------------------
 # Documentation tests — extract, validate, and test code blocks
@@ -249,14 +252,15 @@ New section after existing "Content sync" section:
 .PHONY: test-docs-extract test-docs test-docs-coverage
 
 test-docs-extract: ## Extract testable code blocks from documentation
-	@go run ./cmd/doctest extract --content-dir content/docs --output-dir /tmp/doctest-snippets
+	@go run ./cmd/doctest extract --content-dir content/docs --output-dir .test-output/doctest-snippets
 
 test-docs: test-docs-extract ## Run documentation tests (Bats)
-	@tests/libs/bats-core/bin/bats tests/docs/
+	@node_modules/.bin/bats --formatter pretty tests/docs/
 
 test-docs-coverage: ## Report untested code blocks in documentation
 	@go run ./cmd/doctest coverage --content-dir content/docs
 ```
+<!-- markdownlint-enable MD010 -->
 
 **`check` meta-target update:**
 
@@ -264,7 +268,7 @@ test-docs-coverage: ## Report untested code blocks in documentation
 check: vet fmt-check test-race test-docs-coverage
 ```
 
-Coverage runs as a warning — non-zero exit doesn't fail the build.
+Coverage exits non-zero when untested blocks exist. The `-` prefix in Make ignores the exit code so `check` does not fail the build (Phase 1). Remove the prefix to enforce (Phase 2).
 
 ## CI Integration
 
@@ -272,32 +276,34 @@ Coverage runs as a warning — non-zero exit doesn't fail the build.
 
 **`ci.yml`** — add step after Hugo build:
 ```yaml
-- name: Run documentation tests
+- name: Run documentation tests (informational)
   run: make test-docs
+  continue-on-error: true
 ```
 
 **`deploy-gh-pages.yml`** — add step before deploy:
 ```yaml
-- name: Run documentation tests
+- name: Run documentation tests (informational)
   run: make test-docs
+  continue-on-error: true
 ```
 
-`make test-docs` depends on `test-docs-extract`, so ordering is automatic. Documentation with broken snippets blocks both PR checks and deployment.
+`make test-docs` depends on `test-docs-extract`, so ordering is automatic. The `continue-on-error: true` step attribute makes doc test failures non-blocking in CI (Phase 1). Remove it to enforce (Phase 2).
 
 ## Coverage Enforcement Model
 
 ### Phase 1 (This Implementation)
 
-- `make test-docs-coverage` prints untested blocks to stdout. Always exits 0.
-- Included in `check` meta-target — developers see warnings during normal workflow.
-- `make test-docs` (extract + Bats) runs as a blocking CI step — test failures break the build.
+- `doctest coverage` exits non-zero when untested executable blocks exist.
+- `make test-docs-coverage` and `make test-docs` use `-` prefix (Make) or `continue-on-error: true` (CI) to run without failing the build.
+- Included in `check` and `test` meta-targets — developers see warnings during normal workflow.
 - Coverage gaps are visible but non-blocking.
 
 ### Phase 2 (Future)
 
-- `doctest coverage --strict` exits 1 if any executable-language block lacks `test="..."`.
-- Flip CI to `--strict` once coverage is solid across all pages.
-- One-line change when the team is ready.
+- Remove `-` prefix from Makefile `test-docs` / `test-docs-coverage` calls.
+- Remove `continue-on-error: true` from CI workflow steps.
+- Coverage failures then block builds and PRs.
 
 ### Opt-Out Mechanism
 
@@ -330,12 +336,12 @@ New section "Testing Documentation" after the existing testing section:
 ## Success Criteria
 
 | ID | Criterion |
-|----|-----------|
+| ---- | ----------- |
 | SC-001 | `go test ./cmd/doctest/...` passes all unit tests |
 | SC-002 | `go test -race ./cmd/doctest/...` passes with zero data race warnings |
 | SC-003 | `make test-docs-extract` produces snippet files from annotated Markdown blocks |
 | SC-004 | `make test-docs` runs Bats tests against extracted snippets |
-| SC-005 | `make test-docs-coverage` reports untested executable blocks without failing |
+| SC-005 | `make test-docs-coverage` reports untested executable blocks (exits non-zero when gaps exist, non-blocking in CI/check via `-` prefix) |
 | SC-006 | `make check` includes coverage reporting |
 | SC-007 | CI pipelines (`ci.yml`, `deploy-gh-pages.yml`) run `make test-docs` |
 | SC-008 | CONTRIBUTING.md documents the testable-docs workflow |
