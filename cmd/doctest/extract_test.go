@@ -60,6 +60,8 @@ func TestParseFrontmatter(t *testing.T) {
 		{"opted out", "---\ntestable_docs: false\n---\n# Hello", true, false},
 		{"opted in explicitly", "---\ntestable_docs: true\n---\n# Hello", false, false},
 		{"no testable_docs key", "---\ntitle: Test\n---\n# Hello", false, false},
+		{"dash-prefixed non-frontmatter", "---foo\nbar", false, true},
+		{"dash-prefixed heading followed by a real delimiter", "---foo\nbaz: 1\n---\n# hello", false, true},
 	}
 
 	for _, tt := range tests {
@@ -96,6 +98,11 @@ func TestExtractBlocksBasic(t *testing.T) {
 	}
 	if strings.TrimSpace(string(b.content)) != "echo hello" {
 		t.Errorf("content = %q, want %q", string(b.content), "echo hello\n")
+	}
+	// Fence line is line 7: frontmatter (1-3), blank (4), heading (5),
+	// blank (6), then the ```bash fence (7).
+	if b.line != 7 {
+		t.Errorf("line = %d, want 7", b.line)
 	}
 }
 
@@ -250,6 +257,44 @@ func TestRunExtractBasic(t *testing.T) {
 	}
 }
 
+func TestRunExtractRejectsOverlappingDirs(t *testing.T) {
+	repoDir := t.TempDir()
+	initGitRepo(t, repoDir)
+	contentDir := filepath.Join(repoDir, "content")
+	if err := os.MkdirAll(contentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name        string
+		outputDir   string
+		wantOverlap bool
+	}{
+		{"identical dirs", contentDir, true},
+		{"output is ancestor of content", repoDir, true},
+		{"output is descendant of content", filepath.Join(contentDir, "snippets"), true},
+		{"sibling dir sharing a name prefix", contentDir + "-backup", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := runExtract(contentDir, tt.outputDir)
+			if tt.wantOverlap {
+				if err == nil {
+					t.Fatal("expected error for overlapping content/output dirs, got nil")
+				}
+				if !strings.Contains(err.Error(), "overlap") {
+					t.Errorf("error = %q, want it to mention directory overlap", err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected no error for non-overlapping sibling dirs, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestRunExtractDuplicateError(t *testing.T) {
 	repoDir := t.TempDir()
 	initGitRepo(t, repoDir)
@@ -331,6 +376,103 @@ func TestRunExtractOrdering(t *testing.T) {
 	}
 }
 
+func TestRunExtractRemovesStaleSnippets(t *testing.T) {
+	repoDir := t.TempDir()
+	initGitRepo(t, repoDir)
+	contentDir := filepath.Join(repoDir, "content")
+	outputDir := t.TempDir()
+
+	if err := os.MkdirAll(contentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	md := "```bash {test=\"current\"}\necho current\n```\n"
+	if err := os.WriteFile(filepath.Join(contentDir, "test.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitAdd(t, repoDir, "content/test.md")
+
+	// Pre-populate outputDir with a stale snippet and manifest left over from
+	// a prior run whose source block was since renamed or deleted.
+	staleDir := filepath.Join(outputDir, "test")
+	if err := os.MkdirAll(staleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	staleFile := filepath.Join(staleDir, "01-removed-test.bash")
+	if err := os.WriteFile(staleFile, []byte("echo stale\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runExtract(contentDir, outputDir); err != nil {
+		t.Fatalf("runExtract error: %v", err)
+	}
+
+	if _, err := os.Stat(staleFile); !os.IsNotExist(err) {
+		t.Errorf("stale snippet %s should have been removed, stat err = %v", staleFile, err)
+	}
+	if _, err := os.Stat(filepath.Join(staleDir, "01-current.bash")); err != nil {
+		t.Errorf("expected current snippet to exist: %v", err)
+	}
+}
+
+func TestRunExtractSkipsSymlinks(t *testing.T) {
+	repoDir := t.TempDir()
+	initGitRepo(t, repoDir)
+	contentDir := filepath.Join(repoDir, "content")
+	outputDir := t.TempDir()
+
+	if err := os.MkdirAll(contentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// A target file outside contentDir that a malicious/misconfigured
+	// symlink could otherwise cause WalkDir to follow into the tree.
+	outsideDir := t.TempDir()
+	outsideFile := filepath.Join(outsideDir, "outside.md")
+	if err := os.WriteFile(outsideFile, []byte("```bash {test=\"outside\"}\necho outside\n```\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	symlinkPath := filepath.Join(contentDir, "escape.md")
+	if err := os.Symlink(outsideFile, symlinkPath); err != nil {
+		t.Skipf("symlinks not supported on this filesystem: %v", err)
+	}
+
+	if err := runExtract(contentDir, outputDir); err != nil {
+		t.Fatalf("runExtract error: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(outputDir, "escape", "01-outside.bash")); err == nil {
+		t.Error("symlinked file outside contentDir should not have been followed/extracted, but it was")
+	}
+}
+
+func TestRunCoverageSkipsSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	contentDir := filepath.Join(dir, "content")
+
+	if err := os.MkdirAll(contentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	outsideDir := t.TempDir()
+	outsideFile := filepath.Join(outsideDir, "outside.md")
+	if err := os.WriteFile(outsideFile, []byte("```bash\necho untested\n```\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	symlinkPath := filepath.Join(contentDir, "escape.md")
+	if err := os.Symlink(outsideFile, symlinkPath); err != nil {
+		t.Skipf("symlinks not supported on this filesystem: %v", err)
+	}
+
+	// The symlinked file's untested block must not be followed/reported;
+	// if it were, coverage would fail with 1 untested block.
+	if err := runCoverage(contentDir); err != nil {
+		t.Fatalf("runCoverage should not follow symlinks out of content tree, got: %v", err)
+	}
+}
+
 func TestRunCoverageReport(t *testing.T) {
 	repoDir := t.TempDir()
 	initGitRepo(t, repoDir)
@@ -352,6 +494,26 @@ func TestRunCoverageReport(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "1 untested") {
 		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestRunCoverageAllTested(t *testing.T) {
+	repoDir := t.TempDir()
+	initGitRepo(t, repoDir)
+	contentDir := filepath.Join(repoDir, "content")
+
+	if err := os.MkdirAll(contentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Every executable block is annotated; the yaml block is not testable.
+	md := "```bash {test=\"tested\"}\necho tested\n```\n\n```yaml\nkey: value\n```\n"
+	if err := os.WriteFile(filepath.Join(contentDir, "test.md"), []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitAdd(t, repoDir, "content/test.md")
+
+	if err := runCoverage(contentDir); err != nil {
+		t.Fatalf("runCoverage should pass when all executable blocks are tested, got: %v", err)
 	}
 }
 

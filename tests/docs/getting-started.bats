@@ -12,7 +12,8 @@ setup() {
     load '../../node_modules/bats-assert/load'
 }
 
-# Placeholder: add @test blocks as snippets are annotated.
+# Placeholder: add @test blocks as snippets are annotated (Phase 2).
+# The end-to-end harness wiring is already validated in harness.bats.
 # Example:
 #
 # @test "install-complyctl" {

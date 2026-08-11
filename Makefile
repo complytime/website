@@ -23,7 +23,7 @@ REPO       ?=
 SYNC_BIN   := cmd/sync-content/sync-content
 SYNC_PKG   := ./cmd/sync-content/...
 HUGO_CACHEDIR ?= /tmp/hugo_cache_complytime
-DOCTEST_DIR ?= /tmp/doctest-snippets
+DOCTEST_DIR ?= .test-output/doctest-snippets
 
 # Common flags passed to every sync invocation
 SYNC_FLAGS := --org $(ORG) --config $(CONFIG) --output $(OUTPUT) --workers $(WORKERS) --timeout $(TIMEOUT)
@@ -131,28 +131,28 @@ build: _check-go-version ## Compile the sync-content binary
 	go build -o $(SYNC_BIN) ./cmd/sync-content
 
 .PHONY: test
-test: _check-go-version ## Run all Go unit tests
-	go test $(SYNC_PKG)
-
-test: ## Run all tests (Go unit + doc tests + doc coverage)
+test: _check-go-version ## Run all tests (Go unit + doc tests + doc coverage)
 	go test $(SYNC_PKG) ./cmd/doctest/...
+	# Phase 1: doc tests and coverage are non-blocking (leading '-' ignores
+	# their exit status) until all executable code blocks are annotated.
+	# Remove the '-' prefixes in Phase 2 to make them gate `make test`.
 	-$(MAKE) test-docs
 	-$(MAKE) test-docs-coverage
 
 .PHONY: test-race
-test-race: ## Run Go tests with the race detector
+test-race: _check-go-version ## Run Go tests with the race detector
 	go test -race $(SYNC_PKG) ./cmd/doctest/...
 
 .PHONY: vet
-vet: ## Run go vet
+vet: _check-go-version ## Run go vet
 	go vet $(SYNC_PKG) ./cmd/doctest/...
 
 .PHONY: fmt
-fmt: ## Format Go source files with gofmt
+fmt: _check-go-version ## Format Go source files with gofmt
 	gofmt -w cmd/sync-content/ cmd/doctest/
 
 .PHONY: fmt-check
-fmt-check: ## Check Go formatting (non-destructive)
+fmt-check: _check-go-version ## Check Go formatting (non-destructive)
 	@out=$$(gofmt -l cmd/sync-content/ cmd/doctest/); \
 	if [ -n "$$out" ]; then \
 		echo "The following files need formatting:"; \
@@ -162,6 +162,8 @@ fmt-check: ## Check Go formatting (non-destructive)
 
 .PHONY: check
 check: vet fmt-check test-race ## Run vet + fmt-check + race tests + doc coverage (CI equivalent)
+	# Phase 1: coverage is non-blocking (leading '-') until all executable
+	# code blocks are annotated. Remove the '-' in Phase 2 to make it gate.
 	-$(MAKE) test-docs-coverage
 
 # ---------------------------------------------------------------------------
@@ -200,6 +202,8 @@ sync-single: ## Apply sync for one repo  (REPO=complytime/complyctl)
 
 .PHONY: test-docs-extract
 test-docs-extract: ## Extract testable code blocks from documentation
+	@# The doctest tool empties DOCTEST_DIR contents itself before writing,
+	@# so stale snippets from previous runs never leak into the Bats tests.
 	@go run ./cmd/doctest extract --content-dir content/docs --output-dir $(DOCTEST_DIR)
 
 .PHONY: test-docs

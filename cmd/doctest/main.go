@@ -8,7 +8,7 @@
 //
 // Usage:
 //
-//	doctest extract --content-dir content/docs --output-dir /tmp/doctest-snippets
+//	doctest extract --content-dir content/docs --output-dir .test-output/doctest-snippets
 //	doctest coverage --content-dir content/docs
 package main
 
@@ -19,23 +19,27 @@ import (
 	"os"
 )
 
-func main() { os.Exit(run()) }
+func main() { os.Exit(run(os.Args[1:])) }
 
-func run() int {
+// run executes the doctest CLI with the given arguments (excluding the program
+// name) and returns a process exit code. It takes args explicitly and uses
+// flag.ContinueOnError so that all exit paths are unit-testable without
+// mutating global state or terminating the process.
+func run(args []string) int {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
-	if len(os.Args) < 2 {
+	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "usage: doctest <extract|coverage> [flags]")
 		return 1
 	}
 
-	subcmd := os.Args[1]
+	subcmd := args[0]
 	switch subcmd {
 	case "extract":
-		fs := flag.NewFlagSet("extract", flag.ExitOnError)
+		fs := flag.NewFlagSet("extract", flag.ContinueOnError)
 		contentDir := fs.String("content-dir", "", "Root directory of Markdown content (required)")
 		outputDir := fs.String("output-dir", "", "Directory for extracted snippets (required)")
-		if err := fs.Parse(os.Args[2:]); err != nil {
+		if err := fs.Parse(args[1:]); err != nil {
 			return 1
 		}
 		if *contentDir == "" || *outputDir == "" {
@@ -47,9 +51,9 @@ func run() int {
 			return 1
 		}
 	case "coverage":
-		fs := flag.NewFlagSet("coverage", flag.ExitOnError)
+		fs := flag.NewFlagSet("coverage", flag.ContinueOnError)
 		contentDir := fs.String("content-dir", "", "Root directory of Markdown content (required)")
-		if err := fs.Parse(os.Args[2:]); err != nil {
+		if err := fs.Parse(args[1:]); err != nil {
 			return 1
 		}
 		if *contentDir == "" {
