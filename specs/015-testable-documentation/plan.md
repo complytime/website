@@ -17,7 +17,7 @@
 ### New files
 
 | Path | Purpose |
-|------|---------|
+| ------ | --------- |
 | `cmd/doctest/main.go` | CLI entry point: `extract` and `coverage` subcommands |
 | `cmd/doctest/extract.go` | Markdown walker, attribute parser, snippet writer, manifest generator |
 | `cmd/doctest/extract_test.go` | Table-driven unit tests for extraction and coverage |
@@ -31,7 +31,7 @@
 ### Modified files
 
 | Path | Change |
-|------|--------|
+| ------ | -------- |
 | `go.mod` | Add `github.com/yuin/goldmark` dependency |
 | `go.sum` | Updated by `go mod tidy` |
 | `Makefile` | Add `test-docs-extract`, `test-docs`, `test-docs-coverage` targets; update `check` |
@@ -45,7 +45,7 @@
 
 ## Task Dependency Graph
 
-```
+```text
 Task 1 (Go extractor core + coverage)
   └─> Task 2 (Go extractor tests)
         └─> Task 3 (Bats submodules + harness)
@@ -82,490 +82,13 @@ Verify `go.mod` now contains `github.com/yuin/goldmark`.
 
 Create `cmd/doctest/main.go` with the CLI entry point:
 
-```go
-// SPDX-License-Identifier: Apache-2.0
-
-// Command doctest extracts annotated code blocks from Markdown documentation
-// and reports test coverage gaps.
-//
-// Fenced code blocks with a {test="<name>"} attribute in the info string are
-// extracted to individual files. Hand-written Bats tests then verify them.
-//
-// Usage:
-//
-//	doctest extract --content-dir content/docs --output-dir /tmp/doctest-snippets
-//	doctest coverage --content-dir content/docs
-package main
-
-import (
-	"flag"
-	"fmt"
-	"log/slog"
-	"os"
-)
-
-func main() { os.Exit(run()) }
-
-func run() int {
-	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
-
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: doctest <extract|coverage> [flags]")
-		return 1
-	}
-
-	subcmd := os.Args[1]
-	switch subcmd {
-	case "extract":
-		fs := flag.NewFlagSet("extract", flag.ExitOnError)
-		contentDir := fs.String("content-dir", "", "Root directory of Markdown content (required)")
-		outputDir := fs.String("output-dir", "", "Directory for extracted snippets (required)")
-		if err := fs.Parse(os.Args[2:]); err != nil {
-			return 1
-		}
-		if *contentDir == "" || *outputDir == "" {
-			fmt.Fprintln(os.Stderr, "extract: --content-dir and --output-dir are required")
-			return 1
-		}
-		if err := runExtract(*contentDir, *outputDir); err != nil {
-			slog.Error("extract failed", "error", err)
-			return 1
-		}
-	case "coverage":
-		fs := flag.NewFlagSet("coverage", flag.ExitOnError)
-		contentDir := fs.String("content-dir", "", "Root directory of Markdown content (required)")
-		if err := fs.Parse(os.Args[2:]); err != nil {
-			return 1
-		}
-		if *contentDir == "" {
-			fmt.Fprintln(os.Stderr, "coverage: --content-dir is required")
-			return 1
-		}
-		if err := runCoverage(*contentDir); err != nil {
-			slog.Error("coverage failed", "error", err)
-			return 1
-		}
-	default:
-		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\nusage: doctest <extract|coverage> [flags]\n", subcmd)
-		return 1
-	}
-	return 0
-}
-```
+See the implemented source in [`cmd/doctest/main.go`](../../cmd/doctest/main.go) for the authoritative version; the design intent is described in the prose above.
 
 - [ ] **Step 3: Create `cmd/doctest/extract.go`**
 
 Create `cmd/doctest/extract.go` with the extraction and coverage logic:
 
-```go
-// SPDX-License-Identifier: Apache-2.0
-package main
-
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strings"
-
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/text"
-
-	goyaml "github.com/goccy/go-yaml"
-)
-
-// testableLangs are languages whose untested blocks produce coverage warnings.
-var testableLangs = map[string]bool{
-	"bash":  true,
-	"sh":    true,
-	"shell": true,
-	"zsh":   true,
-}
-
-// nonTestableLangs are explicitly silenced in coverage reports.
-var nonTestableLangs = map[string]bool{
-	"text": true, "plaintext": true, "console": true,
-	"yaml": true, "toml": true, "json": true,
-	"xml": true, "csv": true, "markdown": true,
-	"go": true, "python": true,
-}
-
-var testIDPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
-
-// snippet represents a single extracted code block.
-type snippet struct {
-	Test       string `json:"test"`
-	File       string `json:"file"`
-	SourceLine int    `json:"source_line"`
-	Language   string `json:"language"`
-}
-
-// manifest represents the JSON manifest for a single page.
-type manifest struct {
-	Page     string    `json:"page"`
-	Snippets []snippet `json:"snippets"`
-}
-
-// codeBlock is an intermediate representation of a parsed fenced code block.
-type codeBlock struct {
-	lang     string
-	testName string
-	content  []byte
-	line     int // 1-based line number in the source file
-}
-
-// frontmatter holds the subset of YAML frontmatter we care about.
-type frontmatter struct {
-	TestableDocs *bool `yaml:"testable_docs"`
-}
-
-// parseFrontmatter extracts YAML frontmatter from Markdown source.
-// Returns nil (not opted-out) if no frontmatter is found.
-func parseFrontmatter(source []byte) (*frontmatter, error) {
-	// Find --- delimiters
-	if !bytes.HasPrefix(source, []byte("---")) {
-		return nil, nil
-	}
-	end := bytes.Index(source[3:], []byte("\n---"))
-	if end == -1 {
-		return nil, nil
-	}
-	yamlBytes := source[3 : end+3]
-
-	var fm frontmatter
-	if err := goyaml.Unmarshal(yamlBytes, &fm); err != nil {
-		return nil, fmt.Errorf("parsing frontmatter: %w", err)
-	}
-	return &fm, nil
-}
-
-// isOptedOut returns true if the page has testable_docs: false.
-func isOptedOut(fm *frontmatter) bool {
-	return fm != nil && fm.TestableDocs != nil && !*fm.TestableDocs
-}
-
-// parseInfoString extracts the language and test attribute from a fenced code
-// block info string. Examples:
-//
-//	"bash {test=\"install\"}"  -> ("bash", "install")
-//	"bash"                     -> ("bash", "")
-//	""                         -> ("", "")
-func parseInfoString(info string) (lang string, testName string, err error) {
-	info = strings.TrimSpace(info)
-	if info == "" {
-		return "", "", nil
-	}
-
-	// Split on '{' to separate language from attributes
-	langPart, attrPart, hasAttrs := strings.Cut(info, "{")
-	lang = strings.TrimSpace(langPart)
-
-	if !hasAttrs {
-		return lang, "", nil
-	}
-
-	// Re-add the '{' for parser.ParseAttributes
-	attrStr := "{" + attrPart
-	reader := text.NewReader([]byte(attrStr))
-	attrs, ok := parser.ParseAttributes(reader)
-	if !ok {
-		return lang, "", nil
-	}
-
-	for _, attr := range attrs {
-		if string(attr.Name) == "test" {
-			if v, ok := attr.Value.([]byte); ok {
-				testName = string(v)
-			}
-			break
-		}
-	}
-
-	if testName != "" && !testIDPattern.MatchString(testName) {
-		return "", "", fmt.Errorf("invalid test identifier %q: must match [a-z0-9-]+", testName)
-	}
-
-	return lang, testName, nil
-}
-
-// extractBlocks parses a Markdown file and returns all fenced code blocks.
-func extractBlocks(source []byte) ([]codeBlock, error) {
-	md := goldmark.New()
-	reader := text.NewReader(source)
-	doc := md.Parser().Parse(reader)
-
-	var blocks []codeBlock
-	err := ast.Walk(doc, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering || node.Kind() != ast.KindFencedCodeBlock {
-			return ast.WalkContinue, nil
-		}
-		fcb := node.(*ast.FencedCodeBlock)
-
-		// Get the full info string
-		var info string
-		if fcb.Info != nil {
-			info = string(fcb.Info.Segment.Value(source))
-		}
-
-		lang, testName, err := parseInfoString(info)
-		if err != nil {
-			return ast.WalkStop, fmt.Errorf("line %d: %w", fcb.Lines().At(0).Start, err)
-		}
-
-		// Collect code content
-		var content []byte
-		for i := 0; i < fcb.Lines().Len(); i++ {
-			line := fcb.Lines().At(i)
-			content = append(content, line.Value(source)...)
-		}
-
-		blocks = append(blocks, codeBlock{
-			lang:     lang,
-			testName: testName,
-			content:  content,
-			line:     lineNumber(source, node),
-		})
-
-		return ast.WalkContinue, nil
-	})
-
-	return blocks, err
-}
-
-// lineNumber computes the 1-based line number for an AST node's position.
-func lineNumber(source []byte, node ast.Node) int {
-	// Use the first line of the code block to find the position,
-	// then scan backwards to find the fence line.
-	// The node itself doesn't track the fence line, but we can use
-	// the text segment positions.
-	pos := 0
-	if fcb, ok := node.(*ast.FencedCodeBlock); ok && fcb.Lines().Len() > 0 {
-		seg := fcb.Lines().At(0)
-		pos = seg.Start
-	}
-	// Count newlines before pos to get line number, then subtract 1
-	// for the fence line itself.
-	line := 1
-	for i := 0; i < pos && i < len(source); i++ {
-		if source[i] == '\n' {
-			line++
-		}
-	}
-	// The fence line (```) is one line before the first content line
-	if line > 1 {
-		line--
-	}
-	return line
-}
-
-// langExtension returns the file extension for a language identifier.
-func langExtension(lang string) string {
-	switch lang {
-	case "bash", "sh", "shell", "zsh":
-		return lang
-	case "yaml", "yml":
-		return "yaml"
-	case "json":
-		return "json"
-	case "toml":
-		return "toml"
-	case "go":
-		return "go"
-	case "python", "py":
-		return "py"
-	default:
-		if lang == "" {
-			return "txt"
-		}
-		return lang
-	}
-}
-
-// pageSlug computes the output directory name from a file path relative to
-// the content directory. For "getting-started/_index.md" -> "getting-started".
-// For "guides/advanced/_index.md" -> "guides-advanced".
-// For "_index.md" at the root -> "root".
-func pageSlug(relPath string) string {
-	dir := filepath.Dir(relPath)
-	if dir == "." || dir == "" {
-		return "root"
-	}
-	// Replace path separators with hyphens
-	return strings.ReplaceAll(filepath.ToSlash(dir), "/", "-")
-}
-
-// runExtract walks the content directory, extracts annotated code blocks,
-// and writes them to the output directory.
-func runExtract(contentDir, outputDir string) error {
-	return filepath.WalkDir(contentDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || filepath.Ext(path) != ".md" {
-			return nil
-		}
-
-		source, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("reading %s: %w", path, err)
-		}
-
-		// Check frontmatter opt-out
-		fm, err := parseFrontmatter(source)
-		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
-		}
-		if isOptedOut(fm) {
-			return nil
-		}
-
-		blocks, err := extractBlocks(source)
-		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
-		}
-
-		// Filter to annotated blocks only
-		var annotated []codeBlock
-		for _, b := range blocks {
-			if b.testName != "" {
-				annotated = append(annotated, b)
-			}
-		}
-		if len(annotated) == 0 {
-			return nil
-		}
-
-		// Check for duplicate test names
-		seen := make(map[string]int) // testName -> line number
-		for _, b := range annotated {
-			if prevLine, ok := seen[b.testName]; ok {
-				return fmt.Errorf("%s: duplicate test name %q at lines %d and %d",
-					path, b.testName, prevLine, b.line)
-			}
-			seen[b.testName] = b.line
-		}
-
-		// Compute output paths and write
-		relPath, err := filepath.Rel(contentDir, path)
-		if err != nil {
-			return fmt.Errorf("computing relative path for %s: %w", path, err)
-		}
-		slug := pageSlug(relPath)
-		pageDir := filepath.Join(outputDir, slug)
-		if err := os.MkdirAll(pageDir, 0o755); err != nil {
-			return fmt.Errorf("creating directory %s: %w", pageDir, err)
-		}
-
-		var snippets []snippet
-		for i, b := range annotated {
-			ext := langExtension(b.lang)
-			filename := fmt.Sprintf("%02d-%s.%s", i+1, b.testName, ext)
-			outPath := filepath.Join(pageDir, filename)
-
-			if err := os.WriteFile(outPath, b.content, 0o644); err != nil {
-				return fmt.Errorf("writing %s: %w", outPath, err)
-			}
-
-			snippets = append(snippets, snippet{
-				Test:       b.testName,
-				File:       filename,
-				SourceLine: b.line,
-				Language:   b.lang,
-			})
-		}
-
-		// Write manifest
-		m := manifest{
-			Page:     path,
-			Snippets: snippets,
-		}
-		manifestData, err := json.MarshalIndent(m, "", "  ")
-		if err != nil {
-			return fmt.Errorf("marshaling manifest for %s: %w", path, err)
-		}
-		manifestPath := filepath.Join(pageDir, "manifest.json")
-		if err := os.WriteFile(manifestPath, append(manifestData, '\n'), 0o644); err != nil {
-			return fmt.Errorf("writing %s: %w", manifestPath, err)
-		}
-
-		return nil
-	})
-}
-
-// coverageEntry represents an untested executable code block.
-type coverageEntry struct {
-	File     string
-	Line     int
-	Language string
-}
-
-// runCoverage walks the content directory and reports untested executable blocks.
-func runCoverage(contentDir string) error {
-	var entries []coverageEntry
-
-	err := filepath.WalkDir(contentDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || filepath.Ext(path) != ".md" {
-			return nil
-		}
-
-		source, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("reading %s: %w", path, err)
-		}
-
-		fm, err := parseFrontmatter(source)
-		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
-		}
-		if isOptedOut(fm) {
-			return nil
-		}
-
-		blocks, err := extractBlocks(source)
-		if err != nil {
-			return fmt.Errorf("%s: %w", path, err)
-		}
-
-		for _, b := range blocks {
-			if b.testName != "" {
-				continue // annotated = tested
-			}
-			if !testableLangs[b.lang] {
-				continue // not a testable language
-			}
-			entries = append(entries, coverageEntry{
-				File:     path,
-				Line:     b.line,
-				Language: b.lang,
-			})
-		}
-
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-
-	if len(entries) > 0 {
-		fmt.Printf("Untested executable code blocks (%d):\n", len(entries))
-		for _, e := range entries {
-			fmt.Printf("  %s:%d [%s]\n", e.File, e.Line, e.Language)
-		}
-	} else {
-		fmt.Println("All executable code blocks are tested.")
-	}
-
-	return nil
-}
-```
+See the implemented source in [`cmd/doctest/extract.go`](../../cmd/doctest/extract.go) for the authoritative version; the design intent is described in the prose above.
 
 - [ ] **Step 4: Verify compilation**
 
@@ -582,10 +105,10 @@ rm -f doctest
 - [ ] **Step 5: Smoke test against existing content**
 
 ```bash
-go run ./cmd/doctest extract --content-dir content/docs --output-dir /tmp/doctest-snippets
+go run ./cmd/doctest extract --content-dir content/docs --output-dir .test-output/doctest-snippets
 ```
 
-Expected: completes with exit 0. Since no blocks have `{test="..."}` yet, `/tmp/doctest-snippets` should be empty or not created.
+Expected: completes with exit 0. Since no blocks have `{test="..."}` yet, `.test-output/doctest-snippets` should be empty or not created.
 
 ```bash
 go run ./cmd/doctest coverage --content-dir content/docs
@@ -617,349 +140,7 @@ Part of testable documentation infrastructure (spec 015)."
 
 - [ ] **Step 1: Create `cmd/doctest/extract_test.go`**
 
-```go
-// SPDX-License-Identifier: Apache-2.0
-package main
-
-import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-)
-
-func TestParseInfoStringBasic(t *testing.T) {
-	tests := []struct {
-		name     string
-		info     string
-		wantLang string
-		wantTest string
-		wantErr  bool
-	}{
-		{"empty", "", "", "", false},
-		{"lang only", "bash", "bash", "", false},
-		{"lang with test", `bash {test="install"}`, "bash", "install", false},
-		{"no space before brace", `bash{test="install"}`, "bash", "install", false},
-		{"attrs without test key", `bash {.highlight}`, "bash", "", false},
-		{"test with hyphens and numbers", `sh {test="my-test-01"}`, "sh", "my-test-01", false},
-		{"invalid test id uppercase", `bash {test="Install"}`, "", "", true},
-		{"invalid test id spaces", `bash {test="my test"}`, "", "", true},
-		{"invalid test id underscore", `bash {test="my_test"}`, "", "", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			lang, testName, err := parseInfoString(tt.info)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("parseInfoString(%q) error = %v, wantErr = %v", tt.info, err, tt.wantErr)
-			}
-			if err != nil {
-				return
-			}
-			if lang != tt.wantLang {
-				t.Errorf("lang = %q, want %q", lang, tt.wantLang)
-			}
-			if testName != tt.wantTest {
-				t.Errorf("testName = %q, want %q", testName, tt.wantTest)
-			}
-		})
-	}
-}
-
-func TestParseFrontmatter(t *testing.T) {
-	tests := []struct {
-		name       string
-		source     string
-		wantOptOut bool
-		wantNil    bool
-	}{
-		{"no frontmatter", "# Hello\nworld", false, true},
-		{"empty frontmatter", "---\n---\n# Hello", false, false},
-		{"opted out", "---\ntestable_docs: false\n---\n# Hello", true, false},
-		{"opted in explicitly", "---\ntestable_docs: true\n---\n# Hello", false, false},
-		{"no testable_docs key", "---\ntitle: Test\n---\n# Hello", false, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fm, err := parseFrontmatter([]byte(tt.source))
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if tt.wantNil && fm != nil && fm.TestableDocs != nil {
-				t.Fatal("expected nil TestableDocs")
-			}
-			if got := isOptedOut(fm); got != tt.wantOptOut {
-				t.Errorf("isOptedOut = %v, want %v", got, tt.wantOptOut)
-			}
-		})
-	}
-}
-
-func TestExtractBlocksBasic(t *testing.T) {
-	source := []byte("---\ntitle: Test\n---\n\n# Hello\n\n```bash {test=\"install\"}\necho hello\n```\n")
-	blocks, err := extractBlocks(source)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(blocks) != 1 {
-		t.Fatalf("got %d blocks, want 1", len(blocks))
-	}
-	b := blocks[0]
-	if b.lang != "bash" {
-		t.Errorf("lang = %q, want %q", b.lang, "bash")
-	}
-	if b.testName != "install" {
-		t.Errorf("testName = %q, want %q", b.testName, "install")
-	}
-	if strings.TrimSpace(string(b.content)) != "echo hello" {
-		t.Errorf("content = %q, want %q", string(b.content), "echo hello\n")
-	}
-}
-
-func TestExtractBlocksOrdering(t *testing.T) {
-	source := []byte("```bash {test=\"first\"}\necho 1\n```\n\nsome text\n\n```bash {test=\"second\"}\necho 2\n```\n")
-	blocks, err := extractBlocks(source)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var annotated []codeBlock
-	for _, b := range blocks {
-		if b.testName != "" {
-			annotated = append(annotated, b)
-		}
-	}
-	if len(annotated) != 2 {
-		t.Fatalf("got %d annotated blocks, want 2", len(annotated))
-	}
-	if annotated[0].testName != "first" {
-		t.Errorf("first block testName = %q, want %q", annotated[0].testName, "first")
-	}
-	if annotated[1].testName != "second" {
-		t.Errorf("second block testName = %q, want %q", annotated[1].testName, "second")
-	}
-}
-
-func TestExtractBlocksNoInfoString(t *testing.T) {
-	source := []byte("```\necho hello\n```\n")
-	blocks, err := extractBlocks(source)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(blocks) != 1 {
-		t.Fatalf("got %d blocks, want 1", len(blocks))
-	}
-	if blocks[0].lang != "" {
-		t.Errorf("lang = %q, want empty", blocks[0].lang)
-	}
-	if blocks[0].testName != "" {
-		t.Errorf("testName = %q, want empty", blocks[0].testName)
-	}
-}
-
-func TestExtractBlocksNonTestableLanguage(t *testing.T) {
-	source := []byte("```yaml {test=\"my-config\"}\nkey: value\n```\n")
-	blocks, err := extractBlocks(source)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(blocks) != 1 {
-		t.Fatalf("got %d blocks, want 1", len(blocks))
-	}
-	if blocks[0].lang != "yaml" {
-		t.Errorf("lang = %q, want %q", blocks[0].lang, "yaml")
-	}
-	if blocks[0].testName != "my-config" {
-		t.Errorf("testName = %q, want %q", blocks[0].testName, "my-config")
-	}
-}
-
-func TestPageSlug(t *testing.T) {
-	tests := []struct {
-		relPath string
-		want    string
-	}{
-		{"getting-started/_index.md", "getting-started"},
-		{"guides/advanced/_index.md", "guides-advanced"},
-		{"_index.md", "root"},
-		{"overview.md", "root"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.relPath, func(t *testing.T) {
-			if got := pageSlug(tt.relPath); got != tt.want {
-				t.Errorf("pageSlug(%q) = %q, want %q", tt.relPath, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestLangExtension(t *testing.T) {
-	tests := []struct {
-		lang string
-		want string
-	}{
-		{"bash", "bash"},
-		{"sh", "sh"},
-		{"yaml", "yaml"},
-		{"python", "py"},
-		{"go", "go"},
-		{"", "txt"},
-		{"rust", "rust"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.lang, func(t *testing.T) {
-			if got := langExtension(tt.lang); got != tt.want {
-				t.Errorf("langExtension(%q) = %q, want %q", tt.lang, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestRunExtractBasic(t *testing.T) {
-	contentDir := t.TempDir()
-	outputDir := t.TempDir()
-
-	md := "---\ntitle: Test\n---\n\n```bash {test=\"hello\"}\necho hello\n```\n"
-	subDir := filepath.Join(contentDir, "getting-started")
-	if err := os.MkdirAll(subDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(subDir, "_index.md"), []byte(md), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := runExtract(contentDir, outputDir); err != nil {
-		t.Fatalf("runExtract error: %v", err)
-	}
-
-	// Check snippet file
-	snippetPath := filepath.Join(outputDir, "getting-started", "01-hello.bash")
-	data, err := os.ReadFile(snippetPath)
-	if err != nil {
-		t.Fatalf("reading snippet: %v", err)
-	}
-	if strings.TrimSpace(string(data)) != "echo hello" {
-		t.Errorf("snippet content = %q, want %q", string(data), "echo hello\n")
-	}
-
-	// Check manifest
-	manifestPath := filepath.Join(outputDir, "getting-started", "manifest.json")
-	manifestData, err := os.ReadFile(manifestPath)
-	if err != nil {
-		t.Fatalf("reading manifest: %v", err)
-	}
-	var m manifest
-	if err := json.Unmarshal(manifestData, &m); err != nil {
-		t.Fatalf("parsing manifest: %v", err)
-	}
-	if len(m.Snippets) != 1 {
-		t.Fatalf("manifest has %d snippets, want 1", len(m.Snippets))
-	}
-	if m.Snippets[0].Test != "hello" {
-		t.Errorf("snippet test = %q, want %q", m.Snippets[0].Test, "hello")
-	}
-	if m.Snippets[0].Language != "bash" {
-		t.Errorf("snippet language = %q, want %q", m.Snippets[0].Language, "bash")
-	}
-}
-
-func TestRunExtractDuplicateError(t *testing.T) {
-	contentDir := t.TempDir()
-	outputDir := t.TempDir()
-
-	md := "```bash {test=\"dupe\"}\necho 1\n```\n\n```bash {test=\"dupe\"}\necho 2\n```\n"
-	if err := os.WriteFile(filepath.Join(contentDir, "test.md"), []byte(md), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	err := runExtract(contentDir, outputDir)
-	if err == nil {
-		t.Fatal("expected error for duplicate test names, got nil")
-	}
-	if !strings.Contains(err.Error(), "duplicate test name") {
-		t.Errorf("error = %q, want it to contain %q", err.Error(), "duplicate test name")
-	}
-}
-
-func TestRunExtractFrontmatterOptOut(t *testing.T) {
-	contentDir := t.TempDir()
-	outputDir := t.TempDir()
-
-	md := "---\ntestable_docs: false\n---\n\n```bash {test=\"hello\"}\necho hello\n```\n"
-	if err := os.WriteFile(filepath.Join(contentDir, "test.md"), []byte(md), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := runExtract(contentDir, outputDir); err != nil {
-		t.Fatalf("runExtract error: %v", err)
-	}
-
-	// Output directory should have no subdirectories
-	entries, err := os.ReadDir(outputDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Errorf("output dir has %d entries, want 0 (page should be skipped)", len(entries))
-	}
-}
-
-func TestRunExtractOrdering(t *testing.T) {
-	contentDir := t.TempDir()
-	outputDir := t.TempDir()
-
-	md := "```bash {test=\"alpha\"}\necho a\n```\n\n```bash {test=\"beta\"}\necho b\n```\n\n```bash {test=\"gamma\"}\necho c\n```\n"
-	if err := os.WriteFile(filepath.Join(contentDir, "test.md"), []byte(md), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := runExtract(contentDir, outputDir); err != nil {
-		t.Fatalf("runExtract error: %v", err)
-	}
-
-	expected := []string{"01-alpha.bash", "02-beta.bash", "03-gamma.bash"}
-	pageDir := filepath.Join(outputDir, "root")
-	for _, name := range expected {
-		if _, err := os.Stat(filepath.Join(pageDir, name)); err != nil {
-			t.Errorf("expected file %s not found: %v", name, err)
-		}
-	}
-}
-
-func TestRunCoverageReport(t *testing.T) {
-	contentDir := t.TempDir()
-
-	// One tested, one untested bash block, one yaml block (not testable)
-	md := "```bash {test=\"tested\"}\necho tested\n```\n\n```bash\necho untested\n```\n\n```yaml\nkey: value\n```\n"
-	if err := os.WriteFile(filepath.Join(contentDir, "test.md"), []byte(md), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Capture coverage output by running the function directly
-	// runCoverage prints to stdout but we just verify it doesn't error
-	err := runCoverage(contentDir)
-	if err != nil {
-		t.Fatalf("runCoverage error: %v", err)
-	}
-}
-
-func TestRunCoverageOptOut(t *testing.T) {
-	contentDir := t.TempDir()
-
-	md := "---\ntestable_docs: false\n---\n\n```bash\necho untested\n```\n"
-	if err := os.WriteFile(filepath.Join(contentDir, "test.md"), []byte(md), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Should not error and should not report the untested block
-	err := runCoverage(contentDir)
-	if err != nil {
-		t.Fatalf("runCoverage error: %v", err)
-	}
-}
-```
+See the implemented source in [`cmd/doctest/extract_test.go`](../../cmd/doctest/extract_test.go) for the authoritative version; the design intent is described in the prose above.
 
 - [ ] **Step 2: Run tests to verify they pass**
 
@@ -1026,7 +207,7 @@ This creates `.gitmodules` and clones the repos into `tests/libs/`.
 # Sets the default snippets directory. Individual .bats files load
 # their own libraries in setup().
 
-export SNIPPETS_DIR="${SNIPPETS_DIR:-/tmp/doctest-snippets}"
+export SNIPPETS_DIR="${SNIPPETS_DIR:-.test-output/doctest-snippets}"
 ```
 
 - [ ] **Step 4: Create `tests/docs/helpers/bash.bash`**
@@ -1106,6 +287,7 @@ Part of testable documentation infrastructure (spec 015)."
 
 Insert after line 108 (after the `sync-single` target), before the "Hugo / Node" section:
 
+<!-- markdownlint-disable MD010 -->
 ```makefile
 # ---------------------------------------------------------------------------
 # Documentation tests — extract, validate, and test code blocks
@@ -1113,7 +295,7 @@ Insert after line 108 (after the `sync-single` target), before the "Hugo / Node"
 
 .PHONY: test-docs-extract
 test-docs-extract: ## Extract testable code blocks from documentation
-	@go run ./cmd/doctest extract --content-dir content/docs --output-dir /tmp/doctest-snippets
+	@go run ./cmd/doctest extract --content-dir content/docs --output-dir .test-output/doctest-snippets
 
 .PHONY: test-docs
 test-docs: test-docs-extract ## Run documentation tests (Bats)
@@ -1123,6 +305,7 @@ test-docs: test-docs-extract ## Run documentation tests (Bats)
 test-docs-coverage: ## Report untested code blocks in documentation
 	@go run ./cmd/doctest coverage --content-dir content/docs
 ```
+<!-- markdownlint-enable MD010 -->
 
 - [ ] **Step 2: Update `check` meta-target**
 
@@ -1149,41 +332,51 @@ Also update the quick reference comment at the top of the Makefile (line 11) to 
 The existing `test` and `test-race` targets only test `./cmd/sync-content/...`. Update them to also test `./cmd/doctest/...`:
 
 Change `test` (line 53):
+<!-- markdownlint-disable MD010 -->
 ```makefile
 test: ## Run all Go unit tests
 	go test $(SYNC_PKG) ./cmd/doctest/...
 ```
+<!-- markdownlint-enable MD010 -->
 
 Change `test-race` (line 57):
+<!-- markdownlint-disable MD010 -->
 ```makefile
 test-race: ## Run Go tests with the race detector
 	go test -race $(SYNC_PKG) ./cmd/doctest/...
 ```
+<!-- markdownlint-enable MD010 -->
 
 Also update `vet` (line 61) and `fmt`/`fmt-check` to cover the new package:
 
 Change `vet`:
+<!-- markdownlint-disable MD010 -->
 ```makefile
 vet: ## Run go vet
 	go vet $(SYNC_PKG) ./cmd/doctest/...
 ```
+<!-- markdownlint-enable MD010 -->
 
 Change `fmt`:
+<!-- markdownlint-disable MD010 -->
 ```makefile
 fmt: ## Format Go source files with gofmt
 	gofmt -w cmd/sync-content/ cmd/doctest/
 ```
+<!-- markdownlint-enable MD010 -->
 
 Change `fmt-check`:
+<!-- markdownlint-disable MD010 -->
 ```makefile
 fmt-check: ## Check Go formatting (non-destructive)
 	@out=$$(gofmt -l cmd/sync-content/ cmd/doctest/); \
 	if [ -n "$$out" ]; then \
-		echo "The following files need formatting:"; \
-		echo "$$out"; \
-		exit 1; \
+	echo "The following files need formatting:"; \
+	echo "$$out"; \
+	exit 1; \
 	fi
 ```
+<!-- markdownlint-enable MD010 -->
 
 - [ ] **Step 4: Verify targets work**
 
@@ -1346,11 +539,14 @@ automated tests.
 
 **Annotating a code block:**
 
+<!-- markdownlint-disable MD040 -->
 ````markdown
 ```bash {test="install-complyctl"}
 go install github.com/complytime/complyctl@latest
 ```
 ````
+<!-- markdownlint-enable MD040 -->
+
 
 The `test` value must be lowercase alphanumeric with hyphens (`[a-z0-9-]+`).
 It becomes both the extracted snippet filename and the Bats test reference.
@@ -1376,7 +572,7 @@ to skip it entirely from extraction and coverage reporting.
 
 | Target | What it does |
 |--------|-------------|
-| `make test-docs-extract` | Extract annotated code blocks to `/tmp/doctest-snippets` |
+| `make test-docs-extract` | Extract annotated code blocks to `.test-output/doctest-snippets` |
 | `make test-docs` | Extract + run Bats tests |
 | `make test-docs-coverage` | Report untested executable code blocks (warnings only) |
 
@@ -1485,7 +681,7 @@ project structure. Create AGENTS.md with documentation testing guidance."
 **Files:**
 - Modify: `.gitignore`
 
-**Context:** The `.gitignore` is 60 lines. Extracted snippets go to `/tmp/doctest-snippets` which is outside the repo and doesn't need gitignoring. But the `doctest` binary (if built locally) should be ignored, similar to the existing `/sync-content` ignore on line 13.
+**Context:** The `.gitignore` is 60 lines. Extracted snippets go to `.test-output/doctest-snippets`, an in-repo directory that must be gitignored so generated snippets never get committed. The `doctest` binary (if built locally) should also be ignored, similar to the existing `/sync-content` ignore on line 13.
 
 - [ ] **Step 1: Add doctest binary to .gitignore**
 
@@ -1547,7 +743,7 @@ Expected: vet, fmt-check, race tests (sync-content + doctest), and doc coverage 
 make test-docs-extract
 ```
 
-Expected: exit 0. `/tmp/doctest-snippets` should be empty (no annotated blocks yet).
+Expected: exit 0. `.test-output/doctest-snippets` should be empty (no annotated blocks yet).
 
 - [ ] **Step 5: Run doc tests**
 

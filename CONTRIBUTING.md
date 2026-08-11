@@ -522,7 +522,7 @@ to skip it entirely from extraction and coverage reporting.
 
 | Target | What it does |
 |--------|-------------|
-| `make test-docs-extract` | Extract annotated code blocks to `/tmp/doctest-snippets` |
+| `make test-docs-extract` | Extract annotated code blocks to `.test-output/doctest-snippets` |
 | `make test-docs` | Extract + run Bats tests |
 | `make test-docs-coverage` | Report untested executable code blocks (warnings only) |
 

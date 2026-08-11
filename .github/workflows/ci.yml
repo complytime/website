@@ -48,4 +48,5 @@ jobs:
         run: hugo --minify --gc
 
       - name: Run documentation tests (informational)
-        run: make test-docs || true
+        run: make test-docs
+        continue-on-error: true

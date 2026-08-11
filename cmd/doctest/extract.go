@@ -89,8 +89,9 @@ type frontmatter struct {
 // parseFrontmatter extracts YAML frontmatter from Markdown source.
 // Returns nil (not opted-out) if no frontmatter is found.
 func parseFrontmatter(source []byte) (*frontmatter, error) {
-	// Find --- delimiters
-	if !bytes.HasPrefix(source, []byte("---")) {
+	// Require an opening "---\n" delimiter so that a line like "---foo" at
+	// the start of the file is not mistaken for frontmatter.
+	if !bytes.HasPrefix(source, []byte("---\n")) {
 		return nil, nil
 	}
 	end := bytes.Index(source[3:], []byte("\n---"))
@@ -272,16 +273,87 @@ func pageSlug(relPath string) string {
 	return strings.ReplaceAll(filepath.ToSlash(dir), "/", "-") + "-" + name
 }
 
+// cleanDirContents removes all entries inside dir without removing dir itself,
+// preserving the directory's inode for any process holding a handle to it.
+// If dir does not exist it is created.
+func cleanDirContents(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return os.MkdirAll(dir, 0o755)
+		}
+		return err
+	}
+	for _, e := range entries {
+		if err := os.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// dirsOverlap reports whether a and b resolve to the same directory, or
+// whether one is an ancestor of the other.
+func dirsOverlap(a, b string) (bool, error) {
+	absA, err := filepath.Abs(a)
+	if err != nil {
+		return false, fmt.Errorf("resolving %s: %w", a, err)
+	}
+	absB, err := filepath.Abs(b)
+	if err != nil {
+		return false, fmt.Errorf("resolving %s: %w", b, err)
+	}
+	rel, err := filepath.Rel(absA, absB)
+	if err != nil {
+		return false, nil // different volumes/roots: cannot overlap
+	}
+	if rel == "." {
+		return true, nil // identical directories
+	}
+	if !strings.HasPrefix(rel, "..") {
+		return true, nil // b is inside a
+	}
+	// rel starts with "..": b is outside a, unless every segment is "..",
+	// in which case a is inside b (b is an ancestor of a).
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part != ".." {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 // runExtract walks the content directory, extracts annotated code blocks,
 // and writes them to the output directory.
 func runExtract(contentDir, outputDir string) error {
+	// cleanDirContents below recursively deletes everything under
+	// outputDir; reject any configuration where outputDir equals, contains,
+	// or is contained by contentDir before touching the filesystem, so a
+	// misconfigured --output-dir cannot destroy tracked documentation.
+	if overlap, err := dirsOverlap(contentDir, outputDir); err != nil {
+		return err
+	} else if overlap {
+		return fmt.Errorf("--content-dir %s and --output-dir %s overlap: refusing to delete content", contentDir, outputDir)
+	}
+
 	tracked, err := gitTrackedFiles(contentDir)
 	if err != nil {
 		return err
 	}
+	// Empty stale output from previous runs so renamed or deleted blocks
+	// don't leave orphaned snippets that Bats would test against. Only the
+	// directory contents are removed, not the directory itself, so any
+	// process watching or cd'd into it keeps a valid handle.
+	if err := cleanDirContents(outputDir); err != nil {
+		return fmt.Errorf("cleaning output dir %s: %w", outputDir, err)
+	}
 	return filepath.WalkDir(contentDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		// Skip symlinks to avoid following them out of the content tree (gosec G122).
+		if d.Type()&fs.ModeSymlink != 0 {
+			return nil
 		}
 		if d.IsDir() || filepath.Ext(path) != ".md" {
 			return nil
@@ -351,7 +423,7 @@ func runExtract(contentDir, outputDir string) error {
 			filename := fmt.Sprintf("%02d-%s.%s", i+1, b.testName, ext)
 			outPath := filepath.Join(pageDir, filename)
 
-			if err := os.WriteFile(outPath, b.content, 0o644); err != nil {
+			if err := os.WriteFile(outPath, b.content, 0o600); err != nil {
 				return fmt.Errorf("writing %s: %w", outPath, err)
 			}
 
@@ -373,7 +445,7 @@ func runExtract(contentDir, outputDir string) error {
 			return fmt.Errorf("marshaling manifest for %s: %w", path, err)
 		}
 		manifestPath := filepath.Join(pageDir, "manifest.json")
-		if err := os.WriteFile(manifestPath, append(manifestData, '\n'), 0o644); err != nil {
+		if err := os.WriteFile(manifestPath, append(manifestData, '\n'), 0o600); err != nil {
 			return fmt.Errorf("writing %s: %w", manifestPath, err)
 		}
 
@@ -400,6 +472,10 @@ func runCoverage(contentDir string) error {
 	err = filepath.WalkDir(contentDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		// Skip symlinks to avoid following them out of the content tree (gosec G122).
+		if d.Type()&fs.ModeSymlink != 0 {
+			return nil
 		}
 		if d.IsDir() || filepath.Ext(path) != ".md" {
 			return nil

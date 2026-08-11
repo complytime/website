@@ -5,5 +5,5 @@
 # their own libraries in setup().
 
 setup_suite() {
-    export SNIPPETS_DIR="${SNIPPETS_DIR:-/tmp/doctest-snippets}"
+    export SNIPPETS_DIR="${SNIPPETS_DIR:-.test-output/doctest-snippets}"
 }
