@@ -110,6 +110,8 @@ mainSections = ["docs"]
 
 # SEO (@thulite/seo)
 [seo]
+  [seo.description]
+    summaryFallback = true
   [seo.title]
     separator = " | "
     suffix = ""

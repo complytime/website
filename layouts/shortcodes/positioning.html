@@ -1,0 +1,60 @@
+{{- $section := .Get "section" -}}
+{{- $data := hugo.Data.positioning -}}
+
+{{- if eq $section "problem" -}}
+{{ $data.problem.summary | markdownify }}
+{{- range $data.problem.details }}
+<h4>{{ .title }}</h4>
+<p>{{ .text }}
+{{- if .link }} <a href="{{ .link }}">Learn more &rarr;</a>{{ end -}}
+</p>
+{{- end }}
+
+<h3>What ComplyTime Does About It</h3>
+<p>{{ $data.solution.summary }}</p>
+<p><strong>Key idea:</strong> {{ $data.solution.key_idea }}</p>
+
+{{- else if eq $section "audience" -}}
+<p>{{ $data.audience.summary }}</p>
+<ul>
+{{- range $data.audience.use_cases }}
+  <li>{{ . }}</li>
+{{- end }}
+</ul>
+
+{{- else if eq $section "alternatives" -}}
+<p>{{ $data.alternatives.summary }}</p>
+<table class="table">
+  <thead>
+    <tr>
+      <th>If your situation is&hellip;</th>
+      <th>Consider instead</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{- range $data.alternatives.items }}
+    <tr>
+      <td>{{ .condition }}</td>
+      <td>{{ .recommendation }}</td>
+    </tr>
+  {{- end }}
+  </tbody>
+</table>
+
+{{- else if eq $section "maturity" -}}
+<h3>Operational</h3>
+<ul>
+{{- range $data.maturity.operational }}
+  <li>{{ . }}</li>
+{{- end }}
+</ul>
+<h3>Experimental</h3>
+<ul>
+{{- range $data.maturity.experimental }}
+  <li>{{ . }}</li>
+{{- end }}
+</ul>
+
+{{- else -}}
+<p class="text-danger">Unknown positioning section: {{ $section }}</p>
+{{- end -}}

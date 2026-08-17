@@ -1,13 +1,21 @@
 ---
 title: "Cloud Native Compliance. Reimagined."
-description: "From Code to Compliance, Intelligently. ComplyTime provides engineering-first, API-driven tools for automating compliance workflows."
-lead: "From Code to Compliance, Intelligently. An engineering-first, API-driven approach to automating compliance workflows in cloud native environments."
+description: >-
+  ComplyTime is an open source compliance runtime that pulls policies from OCI
+  registries, dispatches scans to evaluator plugins, and produces control-mapped
+  evidence in OSCAL, SARIF, and Markdown.
+lead: >-
+  From Code to Compliance, Intelligently. An open source compliance runtime
+  that pulls policies from OCI registries, dispatches scans to evaluator
+  plugins, and produces control-mapped evidence in OSCAL, SARIF, and Markdown.
 date: 2024-01-01T00:00:00+00:00
 lastmod: 2024-12-24T00:00:00+00:00
 draft: false
 seo:
-  title: "ComplyTime - Cloud Native Compliance Automation"
-  description: "ComplyTime provides engineering-first, API-driven tools for automating compliance workflows in cloud native environments."
+  title: "ComplyTime - Open Source Compliance Runtime"
+  description: >-
+    ComplyTime pulls policies from OCI registries, dispatches scans to evaluator
+    plugins, and produces control-mapped evidence in OSCAL, SARIF, and Markdown.
   canonical: ""
   noindex: false
 ---
