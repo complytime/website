@@ -31,7 +31,7 @@
     "playwright": "^1.62.1",
     "prettier": "^3.9.6",
     "sass-embedded": "^1.103.1",
-    "vite": "^8.2.1"
+    "vite": "^8.2.2"
   },
   "engines": {
     "node": ">=22"
