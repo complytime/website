@@ -44,10 +44,15 @@ Thumbs.db
 # openspec/config.yaml is tracked (project tool config).
 # Canonical specs live in specs/NNN-name/ (SpecKit format, org standard).
 openspec/changes/
-# SpecKit framework files (scripts and templates are tool-managed).
-.specify/scripts/
-.specify/templates/
-.specify/memory/
+# Speckit — managed by specify init (recreate with: specify init --ai opencode)
+.specify/extensions.yml
+.specify/extensions/
+.specify/init-options.json
+.specify/integration.json
+.specify/integrations/
+.specify/scripts
+.specify/templates
+.specify/workflows/
 
 # ─── Environment and secrets ─────────────────────────────────────────
 .env
