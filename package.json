@@ -28,7 +28,7 @@
     "@changesets/changelog-github": "^1.0.1",
     "@changesets/cli": "^3.0.1",
     "patch-package": "^8.0.1",
-    "playwright": "^1.62.1",
+    "playwright": "^1.63.0",
     "prettier": "^3.9.6",
     "sass-embedded": "^1.104.0",
     "vite": "^8.2.2"
