@@ -30,7 +30,7 @@
     "patch-package": "^8.0.1",
     "playwright": "^1.63.0",
     "prettier": "^3.9.6",
-    "sass-embedded": "^1.104.0",
+    "sass-embedded": "^1.104.1",
     "vite": "^8.2.2"
   },
   "engines": {
